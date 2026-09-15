@@ -27,6 +27,10 @@ All tips land in a plain wallet owned by nobody's app logic — a community pot:
 
 View it on the explorer: https://cookiescan.io/address/5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8
 
+## Walkthrough
+
+Narrated video walkthrough (75s): **https://altaranexus-ship-it.github.io/cookie-crumbs/media/walkthrough.mp4** — also in the repo under `media/walkthrough.mp4`.
+
 ## Getting COOK
 
 Cookie Chain has no faucet. Get COOK by bridging from Solana through the community multi-sig Hyperlane bridge: **https://hyperlane.cookiescan.io** (see the [docs](https://docs.cookiechain.wtf/getting-started)).

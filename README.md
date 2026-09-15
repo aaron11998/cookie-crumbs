@@ -25,7 +25,7 @@ All tips land in a plain wallet owned by nobody's app logic — a community pot:
 5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8
 ```
 
-View it on the explorer: https://cookiescan.io/account/5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8
+View it on the explorer: https://cookiescan.io/address/5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8
 
 ## Getting COOK
 

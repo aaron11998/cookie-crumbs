@@ -44,7 +44,7 @@ const el = {
 };
 
 el.repoLink.href = REPO_URL;
-el.jarExplorer.href = `${EXPLORER}/account/${JAR_PUBKEY_STR}`;
+el.jarExplorer.href = `${EXPLORER}/address/${JAR_PUBKEY_STR}`;
 el.jarExplorer.textContent = `${JAR_PUBKEY_STR.slice(0, 4)}…${JAR_PUBKEY_STR.slice(-4)}`;
 
 /* ---------- state ---------- */
@@ -303,7 +303,7 @@ function renderFeed(rows) {
         <div class="crumb-line">
           <div class="crumb-top">
             <span>
-              <a class="crumb-from mono" href="${EXPLORER}/account/${r.from || ""}" target="_blank" rel="noopener noreferrer">${shortAddr(r.from || "?")}</a>
+              <a class="crumb-from mono" href="${EXPLORER}/address/${r.from || ""}" target="_blank" rel="noopener noreferrer">${shortAddr(r.from || "?")}</a>
               <span class="crumb-time">${timeAgo(r.blockTime)}</span>
             </span>
             <span class="crumb-amount">+${fmtCook(r.lamports)} COOK</span>

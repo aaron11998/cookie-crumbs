@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cookie Crumbs — tip the builders on Cookie Chain</title>
+<meta name="description" content="Cookie Crumbs is a community tip jar cApp on Cookie Chain (SVM). Connect your wallet (Nightly supported), send COOK tips with a message, and watch the crumb feed in real time." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍪</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,900&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-cookie" aria-hidden="true">🍪</span>
+    <div>
+      <div class="brand-name">Cookie Crumbs</div>
+      <div class="brand-sub">a tip jar on Cookie Chain</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span id="net-badge" class="net-badge" title="Cookie Chain mainnet">⛓ cookie chain</span>
+    <button id="connect-btn" class="btn btn-primary">Connect Wallet</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- hero -->
+  <section class="hero">
+    <h1>Leave a <span class="accent">crumb</span>.<br/>Fund the cookie builders.</h1>
+    <p class="hero-sub">
+      Cookie Crumbs is a fully on-chain tip jar for the Cookie Chain community.
+      Every tip is a plain system-program transfer — no middleman, no custodian, no backend.
+      Connect with <strong>Nightly</strong> (or any Solana-standard wallet), attach a message, and it lands on-chain in about a second.
+    </p>
+  </section>
+
+  <!-- no-wallet banner -->
+  <section id="no-wallet" class="banner hidden">
+    <div>
+      <strong>No wallet detected.</strong> Install <a href="https://nightly.app" target="_blank" rel="noopener noreferrer">Nightly</a>
+      and switch its network to <em>Cookie Chain</em> (RPC: <code>https://rpc.cookiescan.io</code>).
+      Any Solana-standard injected wallet also works.
+    </div>
+    <button id="banner-dismiss" class="btn btn-ghost btn-sm">dismiss</button>
+  </section>
+
+  <!-- need-funds banner -->
+  <section id="need-funds" class="banner banner-fund hidden">
+    <div>
+      <strong>Wallet connected but empty.</strong> Get COOK by bridging from Solana at
+      <a href="https://hyperlane.cookiescan.io" target="_blank" rel="noopener noreferrer">hyperlane.cookiescan.io</a>
+      (community multi-sig bridge), then come back and drop a crumb.
+    </div>
+  </section>
+
+  <div class="grid">
+    <!-- LEFT: jar + tip form -->
+    <section class="card jar-card">
+      <div class="jar-head">
+        <h2>The Jar</h2>
+        <a id="jar-explorer" class="jar-addr mono" href="#" target="_blank" rel="noopener noreferrer" title="View jar on Cookiescan">…</a>
+      </div>
+      <div class="jar-stats">
+        <div class="stat">
+          <div class="stat-label">total crumbs</div>
+          <div class="stat-value" id="stat-count">–</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">total COOK</div>
+          <div class="stat-value" id="stat-total">–</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">tippers</div>
+          <div class="stat-value" id="stat-tippers">–</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">last 24h</div>
+          <div class="stat-value" id="stat-24h">–</div>
+        </div>
+      </div>
+      <canvas id="chart" height="120" aria-label="Tips per hour, last 24h"></canvas>
+      <div class="chart-caption">crumbs per hour · last 24h</div>
+
+      <hr class="sep" />
+
+      <h3>Drop a crumb</h3>
+      <div id="status" class="status hidden" role="status"></div>
+
+      <form id="tip-form" class="tip-form">
+        <div class="row">
+          <label for="amount">Amount (COOK)</label>
+          <div class="amount-chips" role="group" aria-label="quick amounts">
+            <button type="button" class="chip" data-amt="0.01">0.01</button>
+            <button type="button" class="chip" data-amt="0.1">0.1</button>
+            <button type="button" class="chip" data-amt="1">1</button>
+          </div>
+        </div>
+        <input id="amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0.1" value="0.1" />
+        <label for="message">Message <span class="muted">(stored locally with your tip)</span></label>
+        <textarea id="message" name="message" rows="2" maxlength="180" placeholder="gm cookie chain 🍪"></textarea>
+        <button id="tip-submit" class="btn btn-primary btn-big" type="submit">Send tip</button>
+        <p class="fineprint">
+          Fees are paid by you in COOK and are tiny. The jar holds whatever the community leaves —
+          nobody can touch it except via future community decisions.
+        </p>
+      </form>
+    </section>
+
+    <!-- RIGHT: feed -->
+    <section class="card feed-card">
+      <div class="feed-head">
+        <h2>Crumb Feed</h2>
+        <button id="refresh-btn" class="btn btn-ghost btn-sm" title="Reload feed from chain">⟳ refresh</button>
+      </div>
+      <div id="feed" class="feed" aria-live="polite">
+        <div class="feed-empty">loading crumbs from the chain…</div>
+      </div>
+      <div class="feed-note">
+        Feed is read straight from Cookie Chain RPC (<code>getSignaturesForAddress</code> → <code>getTransaction</code>). Messages live in your browser only.
+      </div>
+    </section>
+  </div>
+
+  <!-- how it works -->
+  <section class="card how-card">
+    <h2>How it works</h2>
+    <ol class="how">
+      <li><strong>Connect.</strong> Nightly or any Solana-standard wallet, pointed at Cookie Chain.</li>
+      <li><strong>Tip.</strong> Your wallet builds a system-program transfer to the jar — you sign, we broadcast.</li>
+      <li><strong>Confirm.</strong> We poll the RPC until your signature is <em>confirmed</em>, then show the receipt + explorer link.</li>
+      <li><strong>See it.</strong> The feed re-reads the jar's history from the chain. Everyone's crumbs, anyone's view.</li>
+    </ol>
+    <p class="fineprint">
+      Cookie Crumbs is 100% client-side. No accounts, no database, no analytics — your connection talks straight to
+      <code>rpc.cookiescan.io</code>. Source: <a id="repo-link" href="#" target="_blank" rel="noopener noreferrer">GitHub</a>.
+    </p>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>built for the Cookie Chain cApp bounty 🍪</span>
+  <span class="mono">rpc: rpc.cookiescan.io</span>
+</footer>
+
+<!-- toasts -->
+<div id="toasts" class="toasts" aria-live="assertive"></div>
+
+<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

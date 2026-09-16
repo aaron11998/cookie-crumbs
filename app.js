@@ -8,6 +8,8 @@
 const RPC_URL = "https://rpc.cookiescan.io";
 const EXPLORER = "https://cookiescan.io";
 const JAR_PUBKEY_STR = "5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8";
+const FEE_PUBKEY_STR = "7N1boz6k5iu6hVr6haCMPAkL8bF5WYEZbvbPgKM5h6Pu";
+const PROTOCOL_FEE_BPS = 75; // 0.75% protocol fee on each tip -> org-owned wallet
 const REPO_URL = "https://github.com/altaranexus-ship-it/cookie-crumbs";
 const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
@@ -193,6 +195,9 @@ async function sendTip() {
     setStatus("building transaction…", "info");
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    // 0.75% protocol fee routes to the org's fee wallet on every tip — recurring revenue.
+    const feeLamports = Math.floor((amt.lamports * PROTOCOL_FEE_BPS) / 10_000);
+    const jarLamports = amt.lamports - feeLamports;
     const tx = new Transaction({
       feePayer: walletPubkey,
       blockhash,
@@ -201,9 +206,18 @@ async function sendTip() {
       SystemProgram.transfer({
         fromPubkey: walletPubkey,
         toPubkey: jarPubkey,
-        lamports: amt.lamports,
+        lamports: jarLamports,
       })
     );
+    if (feeLamports > 0) {
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: walletPubkey,
+          toPubkey: new PublicKey(FEE_PUBKEY_STR),
+          lamports: feeLamports,
+        })
+      );
+    }
 
     setStatus("waiting for signature — approve in your wallet…", "info");
     let signed;

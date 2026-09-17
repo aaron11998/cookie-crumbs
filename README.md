@@ -77,3 +77,32 @@ app.js        all logic:
 ## License
 
 MIT — do whatever, just be excellent to each other. 🍪
+
+
+---
+
+## Bounty alignment: Create an App on Cookie Chain (Superteam Earn)
+
+Mapping of the listing's required features to what ships here:
+
+| Listing requirement | Cookie Crumbs |
+|---|---|
+| Connect a wallet (Nightly required) | Nightly-first provider discovery + wallet-standard fallback (Phantom/Solflare/Backpack-style) |
+| Display connected wallet address | Shortened address + wallet label in the connect button, full address in receipts |
+| Interact with on-chain functionality | Native COOK system-program transfers to the community jar (or any ?jar=<addr> page) |
+| Execute transactions + real-time feedback | Stage banner: build -> sign -> broadcast -> confirm, toasts at each step |
+| Transaction confirmation handling | Pre-fetched blockhash, blockheight-based expiry + 60s timeout via confirmTransaction |
+| Error handling and user feedback | Human-readable errors: rejection / insufficient funds / wrong network / RPC failure |
+| App-specific data and activity | Crumb Feed: per-tip history (sender, amount, message, time) read from chain |
+| Analytics / dashboard | Totals (tips, COOK volume, unique tippers, 24h volume) + 24-hour tips-per-hour chart |
+| CookieScan integration | Deep links to cookiescan.io for every tip, the jar, and fee transactions |
+| Deployed and publicly accessible | https://altaranexus-ship-it.github.io/cookie-crumbs/ (GitHub Pages) |
+| Open source + README | This repo; setup in Running locally above |
+
+Application addresses (Cookie Chain mainnet, RPC https://rpc.cookiescan.io):
+
+- Community tip jar (tip destination): 5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8
+- Protocol fee treasury (0.75% of each tip): 2BmqohyRU8mprrRXtUokCBje52MBKFd3FWNCcsPLJf3k
+
+Both are plain system accounts - the app is 100% client-side and custodies nothing.
+Get COOK for your first tip via the community bridge: https://hyperlane.cookiescan.io

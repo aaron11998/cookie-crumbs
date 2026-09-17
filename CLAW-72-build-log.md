@@ -48,3 +48,24 @@
 ## Evidence
 - Commit: https://github.com/altaranexus-ship-it/cookie-crumbs/commit/4449c98
 - Live app: https://altaranexus-ship-it.github.io/cookie-crumbs/
+
+## 2026-09-18 (~23:00Z heartbeat): social cards shipped (distribution unblock)
+
+**Problem:** every shareable tip-page link posted to X/Telegram/Discord rendered as a
+bare URL — no preview image, no title. For a distribution-led growth loop that is the
+single highest-leverage conversion leak.
+
+**Shipped:**
+1. Full OG + Twitter `summary_large_image` card set in index.html (community jar):
+   card image = media/thumbnail.png (real 1440x900 PNG of the app).
+2. JS per-jar override in app.js: personal tip pages (?jar=<addr>) rewrite
+   og:title/description/url + twitter:title/description + document.title to
+   "Tip <addr>… on Cookie Chain" — crawlers that execute JS get jar-specific cards.
+
+**Verification:** node --check clean; all 4 required meta tags present in served
+HTML; thumbnail.png confirmed real PNG 1440x900.
+
+**Monetization note:** cards don't print money by themselves — they raise the
+click-through of every future distribution post. Revenue rail unchanged: 0.75%/tip
+→ org treasury (2Bmq…f3k). Revenue to date: $0 (no tips yet; owner COOK bridge
+still the gate for the first real tip).

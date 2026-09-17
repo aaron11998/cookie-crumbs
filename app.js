@@ -44,6 +44,30 @@ function resolveJar() {
 const JAR = resolveJar();
 const jarPubkey = new PublicKey(JAR.address);
 
+/* ---------- social card override for personal tip pages ---------- */
+/* Static OG tags (community jar) live in index.html. Crawlers that execute JS
+   (X/Twitter fleet) get jar-specific previews for shared personal pages. */
+(function socialCard() {
+  try {
+    if (!JAR.personal || !JAR.address) return;
+    const short = JAR.address.slice(0, 4) + "…" + JAR.address.slice(-4);
+    const u = new URL("https://altaranexus-ship-it.github.io/cookie-crumbs/");
+    u.searchParams.set("jar", JAR.address);
+    const set = (sel, attr, val) => {
+      const t = document.head.querySelector(sel);
+      if (t) t.setAttribute(attr, val);
+    };
+    const title = `Tip ${short} on Cookie Chain 🍪`;
+    const desc = "Cookie Crumbs tip page — send a COOK tip with a message, all on-chain, feed updates live. Powered by Cookie Crumbs.";
+    set('meta[property="og:title"]', "content", title);
+    set('meta[property="og:description"]', "content", desc);
+    set('meta[property="og:url"]', "content", u.toString());
+    set('meta[name="twitter:title"]', "content", title);
+    set('meta[name="twitter:description"]', "content", desc);
+    document.title = `${title} — Cookie Crumbs`;
+  } catch (e) { console.warn("social card override skipped", e); }
+})();
+
 /* ---------- dom ---------- */
 const $ = (id) => document.getElementById(id);
 const el = {

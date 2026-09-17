@@ -1,0 +1,13 @@
+# secrets — NEVER commit
+keys/
+*-keypair.json
+program/keypairs/
+
+# build artifacts
+program/target/
+
+# js deps
+node_modules/
+
+# local scratch
+.DS_Store

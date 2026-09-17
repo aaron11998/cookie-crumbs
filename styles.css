@@ -195,3 +195,30 @@ a { color: var(--crumb); }
 .toast.err { border-left-color: var(--err); }
 .toast.ok { border-left-color: var(--ok); }
 @keyframes slidein { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+
+/* ---------- make-your-own tip page ---------- */
+.own-card { margin-top: 26px; }
+.own-blurb { margin: 8px 0 16px; }
+.own-form { display: flex; flex-direction: column; gap: 12px; }
+.own-input {
+  width: 100%;
+  background: var(--card, #1c1613);
+  border: 1px solid rgba(255, 179, 71, 0.25);
+  border-radius: 12px;
+  color: inherit;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.92rem;
+  padding: 12px 14px;
+}
+.own-input:focus { outline: none; border-color: #ffb347; }
+.own-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.own-preview {
+  word-break: break-all;
+  font-size: 0.8rem;
+  color: var(--dim, #857355);
+  min-height: 1em;
+}
+@media (max-width: 640px) {
+  .own-actions .btn { width: 100%; }
+}

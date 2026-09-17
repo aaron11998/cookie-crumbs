@@ -7,9 +7,13 @@
 
 const RPC_URL = "https://rpc.cookiescan.io";
 const EXPLORER = "https://cookiescan.io";
-const JAR_PUBKEY_STR = "5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8";
-const FEE_PUBKEY_STR = "7N1boz6k5iu6hVr6haCMPAkL8bF5WYEZbvbPgKM5h6Pu";
-const PROTOCOL_FEE_BPS = 75; // 0.75% protocol fee on each tip -> org-owned wallet
+const COMMUNITY_JAR = "5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8";
+// Protocol treasury — org-controlled keypair (cookie-deploy.json).
+// 2026-09-17 FIX: replaced 7N1boz6k5iu6hVr6haCMPAkL8bF5WYEZbvbPgKM5h6Pu, whose
+// keypair was never stored anywhere — fees routed there would have been
+// unrecoverable. Nothing was lost (wallet balance 0, no tips yet).
+const FEE_PUBKEY_STR = "2BmqohyRU8mprrRXtUokCBje52MBKFd3FWNCcsPLJf3k";
+const PROTOCOL_FEE_BPS = 75; // 0.75% protocol fee on each tip -> org treasury
 const REPO_URL = "https://github.com/altaranexus-ship-it/cookie-crumbs";
 const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
@@ -18,7 +22,27 @@ const CONFIRM_TIMEOUT_MS = 60_000;
 const { Connection, PublicKey, SystemProgram, Transaction } = solanaWeb3;
 
 const connection = new Connection(RPC_URL, { commitment: "confirmed" });
-const jarPubkey = new PublicKey(JAR_PUBKEY_STR);
+
+/* ---------- jar resolution: community jar vs personal tip pages ---------- */
+/* ?jar=<base58> (or #jar=<base58>) turns this app into a shareable tip page
+   for any address. Every page — community or personal — carries the same
+   0.75% protocol fee; that split is the platform's revenue rail. */
+function resolveJar() {
+  const q = new URLSearchParams(location.search);
+  let raw = (q.get("jar") || "").trim();
+  if (!raw && location.hash.startsWith("#jar=")) raw = decodeURIComponent(location.hash.slice(5)).trim();
+  if (!raw) return { address: COMMUNITY_JAR, personal: false };
+  try {
+    const pk = new PublicKey(raw);
+    const addr = pk.toBase58();
+    if (addr === FEE_PUBKEY_STR) return { address: COMMUNITY_JAR, personal: false }; // treasury is not a tip page
+    return { address: addr, personal: true, onCurve: PublicKey.isOnCurve(pk.toBytes()) };
+  } catch {
+    return { address: COMMUNITY_JAR, personal: false, invalid: raw.slice(0, 44) };
+  }
+}
+const JAR = resolveJar();
+const jarPubkey = new PublicKey(JAR.address);
 
 /* ---------- dom ---------- */
 const $ = (id) => document.getElementById(id);
@@ -46,8 +70,24 @@ const el = {
 };
 
 el.repoLink.href = REPO_URL;
-el.jarExplorer.href = `${EXPLORER}/address/${JAR_PUBKEY_STR}`;
-el.jarExplorer.textContent = `${JAR_PUBKEY_STR.slice(0, 4)}…${JAR_PUBKEY_STR.slice(-4)}`;
+el.jarExplorer.href = `${EXPLORER}/address/${JAR.address}`;
+el.jarExplorer.textContent = `${JAR.address.slice(0, 4)}…${JAR.address.slice(-4)}`;
+
+/* ---------- personal tip-page personalization ---------- */
+if (JAR.personal) {
+  document.title = `Cookie Crumbs — tip this jar on Cookie Chain`;
+  const hero = document.querySelector(".hero h1");
+  const sub = document.querySelector(".hero-sub");
+  if (hero) hero.innerHTML = `This jar takes <span class="accent">crumbs</span>.<br/>Tip it directly on-chain.`;
+  if (sub) {
+    sub.innerHTML = `You're viewing a <strong>personal tip page</strong> for <span class="mono">${shortAddr(JAR.address, 6)}</span> — ` +
+      `<a href="${EXPLORER}/address/${JAR.address}" target="_blank" rel="noopener noreferrer">view on explorer</a>. ` +
+      `Tips go straight to this address; a 0.75% protocol fee keeps Cookie Crumbs running. ` +
+      `Anyone can make a page like this: append <code>?jar=&lt;any address&gt;</code> to the app URL.`;
+  }
+} else if (JAR.invalid) {
+  toast(`"?jar=${JAR.invalid}" is not a valid address — showing the community jar.`, "err", 8000);
+}
 
 /* ---------- state ---------- */
 let wallet = null; // wallet-standard provider
@@ -277,7 +317,7 @@ async function fetchTips() {
           maxSupportedTransactionVersion: 0,
         });
         if (!tx || !tx.meta) return null;
-        const idx = tx.transaction.message.accountKeys.findIndex((k) => k.toBase58() === JAR_PUBKEY_STR);
+        const idx = tx.transaction.message.accountKeys.findIndex((k) => k.toBase58() === JAR.address);
         if (idx === -1) return null;
         const pre = tx.meta.preBalances[idx] || 0;
         const post = tx.meta.postBalances[idx] || 0;
@@ -401,6 +441,39 @@ async function refreshFeed() {
     console.warn("feed refresh failed", e);
     el.feed.innerHTML = `<div class="feed-empty">couldn't load feed: ${humanError(e)}</div>`;
   }
+}
+
+/* ---------- make-your-own tip page ---------- */
+function validBase58Addr(s) {
+  try { return new PublicKey(s.trim()).toBase58(); } catch { return null; }
+}
+const ownInput = document.getElementById("own-address");
+const ownPreview = document.getElementById("own-preview");
+if (ownInput && ownPreview) {
+  ownInput.addEventListener("input", () => {
+    const addr = validBase58Addr(ownInput.value);
+    ownPreview.textContent = addr
+      ? `${location.origin}${location.pathname}?jar=${addr}`
+      : "";
+  });
+  document.getElementById("own-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const addr = validBase58Addr(ownInput.value);
+    if (!addr) { toast("That's not a valid base58 address — paste a wallet address.", "err", 6000); return; }
+    location.href = `${location.origin}${location.pathname}?jar=${addr}`;
+  });
+  const copyBtn = document.getElementById("own-copy");
+  if (copyBtn) copyBtn.addEventListener("click", async () => {
+    const url = JAR.personal
+      ? `${location.origin}${location.pathname}?jar=${JAR.address}`
+      : `${location.origin}${location.pathname}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Link copied — share it anywhere 🍪", "ok");
+    } catch {
+      toast(url, "info", 9000);
+    }
+  });
 }
 
 /* ---------- misc ---------- */

@@ -105,8 +105,8 @@
         <textarea id="message" name="message" rows="2" maxlength="180" placeholder="gm cookie chain 🍪"></textarea>
         <button id="tip-submit" class="btn btn-primary btn-big" type="submit">Send tip</button>
         <p class="fineprint">
-          Fees are paid by you in COOK and are tiny. The jar holds whatever the community leaves —
-          nobody can touch it except via future community decisions.
+          Fees are paid by you in COOK and are tiny. Each tip includes a <strong>0.75% protocol fee</strong>
+          that funds Cookie Crumbs development — everything else lands in the jar, untouched.
         </p>
       </form>
     </section>
@@ -125,6 +125,23 @@
       </div>
     </section>
   </div>
+
+  <!-- make your own tip page -->
+  <section class="card own-card" id="own-card">
+    <h2>Make your own tip page</h2>
+    <p class="fineprint own-blurb">
+      Any Cookie Chain address gets a shareable tip page — same app, your jar, zero setup.
+      Perfect for creators, bots, and community funds. The 0.75% protocol fee on each tip is what keeps the platform running.
+    </p>
+    <form id="own-form" class="own-form">
+      <input id="own-address" class="own-input" placeholder="Paste any wallet address (base58)" autocomplete="off" spellcheck="false" />
+      <div class="own-actions">
+        <button class="btn btn-primary" type="submit">Open tip page →</button>
+        <button type="button" id="own-copy" class="btn btn-ghost" title="Copy a shareable link to this page">copy this page's link</button>
+      </div>
+    </form>
+    <div class="own-preview mono" id="own-preview"></div>
+  </section>
 
   <!-- how it works -->
   <section class="card how-card">

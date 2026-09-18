@@ -140,3 +140,24 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
   5. share-to-earn loop (live) 6. embed widget distribution rail (live).
 - Honest on-chain evidence: treasury 0, jar 0, tips 0 — mechanisms live,
   demand still unproven; widget lowers the cost of first external embed.
+
+## 2026-09-18 (heartbeat 5) — first external embed is LIVE (lumenfall)
+- Evidence re-check (slot ~25.89M): treasury 0 lamports / 0 sigs, community
+  jar 0 / 0. No tips have landed yet; monitor stays armed (owner X post still
+  pending, still owner-gated).
+- DISTRIBUTION MILESTONE: cookie-crumbs embed widget is now live on the
+  LUMENFALL web build (https://altaranexus-ship-it.github.io/lumenfall/) —
+  fixed bottom-left "Tip the devs 🍪" button, community jar, real embed.js
+  load verified by curl after Pages rebuild. This is the first external
+  embed of the widget, on our own second owned asset; lumenfall's game
+  audience is now a tip funnel carrying the 0.75% protocol fee rail.
+- Pipeline consistency: lumenfall main's build_matrix.sh already injects the
+  exact same snippet post-export (dd201e2), so future web deploys keep the
+  widget without manual steps. gh-pages commit 8cd767e.
+- Verified: embed.js live build already serves data-label (c10103d deployed
+  before the embed landed — ordering luck, no gap). Widget markup confirmed
+  in the served HTML tail; page returns 200.
+- Monetization ledger (unchanged, honest): 6 mechanisms live; revenue still
+  $0. Distribution surface now: cookie-crumbs Pages + lumenfall Pages.
+- Next candidates scouted: kdense-science-lab (200) and aeon-intelligence
+  (200) Pages sites exist — doc/product pages are natural embed hosts.

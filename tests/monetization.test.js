@@ -167,6 +167,19 @@ assert.ok(embedJs.includes("window.CookieCrumbs"), "embed.js must expose window.
 assert.ok(/new URL\(APP_URL\)/.test(embedJs), "widget URL must be built from the canonical APP_URL");
 assert.ok(!/innerHTML\s*=/.test(embedJs), "embed.js must not use innerHTML (XSS surface)");
 
+// data-label: host sites can customize the CTA (trim + 32-char cap + safe render)
+const mLabel = embedJs.match(/(var rawLabel = (?:.|\n)*?var label = (?:.|\n)*?);/);
+assert.ok(mLabel, "embed.js must derive rawLabel and label from the data-label attribute");
+const labelFrom = new Function(
+  `return function (attrVal) { var script = { getAttribute: function () { return attrVal; } }; ${mLabel[1]}; return label; }`
+)();
+assert.strictEqual(labelFrom(undefined), "Tip 🍪", "no data-label falls back to the default CTA");
+assert.strictEqual(labelFrom(""), "Tip 🍪", "empty data-label falls back to the default CTA");
+assert.strictEqual(labelFrom("   "), "Tip 🍪", "whitespace data-label falls back to the default CTA");
+assert.strictEqual(labelFrom("Support open research"), "Support open research", "custom label is used verbatim after trim");
+assert.strictEqual(labelFrom("x".repeat(40)), "x".repeat(32), "labels are capped at 32 chars");
+assert.ok(/textContent\s*=\s*label/.test(embedJs), "label must render via textContent (no HTML injection)");
+
 // wiring: embed card + copy button exist; embed-mode class + iframe-close listener
 assert.ok(indexHtml.includes('id="embed-card"'), "index.html must render the embed card");
 assert.ok(indexHtml.includes('id="embed-snippet"') && indexHtml.includes('id="embed-copy"'), "embed card needs snippet + copy button");

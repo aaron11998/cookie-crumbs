@@ -119,6 +119,7 @@ Put a **Tip 🍪** button on any page with one script tag:
 
 - Add `data-jar="<base58 address>"` to collect tips into **your** jar (omit it to tip the community jar).
 - Add `data-via="<base58 address>"` to credit a promoter's referral fee share on tips from your widget.
+- Add `data-label="<text>"` to customize the button (default **Tip 🍪**; trimmed, max 32 chars).
 - The button opens the full tip page in an on-site popup; tips are plain on-chain COOK transfers signed by the tipper's own wallet. Your site never touches keys, RPC, or transaction bytes.
 - Deep link: load your page with `?cookie_crumbs=popup` to open the tip flow immediately.
 - JS API: `CookieCrumbs.open()` / `CookieCrumbs.close()` for custom triggers.

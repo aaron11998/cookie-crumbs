@@ -8,9 +8,12 @@
  * Usage:
  *   <script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"
  *           data-jar="<base58 wallet or jar address>"
- *           data-via="<optional promoter address>"></script>
+ *           data-via="<optional promoter address>"
+ *           data-label="<optional button label, default 'Tip 🍪'"></script>
  *
  *   - data-jar absent  -> community jar
+ *   - data-label       -> custom CTA text (trimmed, capped at 32 chars;
+ *                         rendered via textContent so it can never inject HTML)
  *   - ?cookie_crumbs=popup on the HOST page opens the widget immediately
  *     (lets a host site deep-link straight into the tipping flow)
  *   - data-via credits a promoter's referral share on tips from the widget
@@ -138,7 +141,7 @@
     document.body.appendChild(overlay);
   }
 
-  function mountButton(scriptEl, jar, via) {
+  function mountButton(scriptEl, jar, via, label) {
     var host = document.createElement("div");
     host.id = "ccw-host-" + Math.random().toString(36).slice(2, 8);
     var shadow = host.attachShadow({ mode: "open" });
@@ -146,7 +149,7 @@
     var btn = document.createElement("button");
     btn.className = "ccw-btn";
     btn.setAttribute("type", "button");
-    btn.textContent = "Tip 🍪";
+    btn.textContent = label;
     btn.title = "Tip with Cookie Crumbs — fully on-chain";
     btn.addEventListener("click", function () {
       openModal(buildWidgetUrl(jar, via, location.href));
@@ -162,7 +165,9 @@
 
   var jar = jarFromAttr(script && script.getAttribute("data-jar"));
   var via = jarFromAttr(script && script.getAttribute("data-via"));
-  var host = mountButton(script, jar, via);
+  var rawLabel = ((script && script.getAttribute("data-label")) || "").trim();
+  var label = rawLabel.slice(0, 32) || "Tip 🍪";
+  var host = mountButton(script, jar, via, label);
 
   window.CookieCrumbs = {
     loaded: true,

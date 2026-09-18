@@ -144,6 +144,11 @@ a { color: var(--crumb); }
   border-radius: 999px; padding: 4px 10px;
 }
 .chip:hover { color: var(--crumb); border-color: var(--crumb); }
+.chip-boost {
+  background: linear-gradient(90deg, #ff8c42, #ffb347);
+  color: #1a1208; border-color: #ff8c42; font-weight: 800;
+}
+.chip-boost:hover { color: #1a1208; filter: brightness(1.08); }
 .fineprint { color: var(--dim); font-size: 12px; line-height: 1.5; margin: 8px 0 0; }
 
 /* status */

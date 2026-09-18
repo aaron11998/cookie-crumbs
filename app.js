@@ -17,6 +17,11 @@ const PROTOCOL_FEE_BPS = 75; // 0.75% protocol fee on each tip -> org treasury
 // Referral split: a share link carrying ?via=<address> routes 30% of the protocol
 // fee to that address. Growth rail — promoters earn by distributing tip pages.
 const REFERRAL_SHARE_PCT = 30;
+// Boosted tips: a tip >= BOOST_LAMPORTS is a "boost" — it renders pinned at the
+// top of the feed with a badge. Pay-for-prominence: jar owners/promoters tip big
+// to be seen first. Amount-based, so it is verifiable on-chain from the same
+// balance-delta the feed already computes (no trusted backend needed).
+const BOOST_LAMPORTS = 5_000_000_000; // 5 COOK
 // SPL Memo v2 — verified deployed + executable on Cookie Chain (getAccountInfo,
 // slot ~25.7M). Lets tip messages live ON-CHAIN instead of only in the browser.
 const MEMO_PROGRAM_ID_STR = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
@@ -442,7 +447,13 @@ async function fetchTips() {
       }
     })
   );
-  return rows.filter(Boolean).sort((a, b) => b.blockTime - a.blockTime);
+  return rows.filter(Boolean).sort((a, b) => {
+    // boosts first (pay-for-prominence), then newest-first
+    const ba = a.lamports >= BOOST_LAMPORTS ? 1 : 0;
+    const bb = b.lamports >= BOOST_LAMPORTS ? 1 : 0;
+    if (ba !== bb) return bb - ba;
+    return b.blockTime - a.blockTime;
+  });
 }
 
 function renderFeed(rows) {
@@ -452,15 +463,18 @@ function renderFeed(rows) {
   }
   const esc = (s) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  el.feed.innerHTML = rows
-    .map(
-      (r) => `
-      <div class="crumbs">
+  const boostBadge = (lamports) =>
+    lamports >= BOOST_LAMPORTS
+      ? `<span class="crumb-boost" title="boosted tip — ≥ ${fmtCook(BOOST_LAMPORTS)} COOK, pinned to the top">🚀 BOOST</span>`
+      : "";
+  const renderRow = (r) => `
+      <div class="crumbs${r.lamports >= BOOST_LAMPORTS ? " crumb-boosted" : ""}">
         <span class="crumb-emoji">🍪</span>
         <div class="crumb-line">
           <div class="crumb-top">
             <span>
               <a class="crumb-from mono" href="${EXPLORER}/address/${r.from || ""}" target="_blank" rel="noopener noreferrer">${shortAddr(r.from || "?")}</a>
+              ${boostBadge(r.lamports)}
               ${r.referral ? `<span class="crumb-ref" title="referral fee share paid to ${r.referral}">🔗</span>` : ""}
               <span class="crumb-time">${timeAgo(r.blockTime)}</span>
             </span>
@@ -468,9 +482,10 @@ function renderFeed(rows) {
           </div>
           ${r.message ? `<div class="crumb-msg">${esc(String(r.message).slice(0, 180))}</div>` : ""}
         </div>
-      </div>`
-    )
-    .join("");
+      </div>`;
+  const boosts = rows.filter((r) => r.lamports >= BOOST_LAMPORTS);
+  const rest = rows.filter((r) => r.lamports < BOOST_LAMPORTS);
+  el.feed.innerHTML = [...boosts, ...rest].map(renderRow).join("");
 }
 
 function renderStats(rows) {

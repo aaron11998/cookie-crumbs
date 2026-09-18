@@ -16,6 +16,8 @@ Connect a wallet (**Nightly** supported, plus any Solana-standard injected walle
 - **Error handling & feedback** — human-readable errors for rejection / insufficient funds / wrong network / RPC hiccups, status banner at each stage (build → sign → broadcast → confirm), toasts + inline receipts with explorer links.
 - **App-specific data & activity** — the **Crumb Feed** reads the jar's recent history via `getSignaturesForAddress` → `getTransaction` (balance deltas, senders, timestamps), plus totals: crumb count, total COOK, unique tippers, last-24h volume and a 24-hour tips-per-hour chart.
 - **Analytics** — everything above is computed client-side from RPC data. No API keys, no database.
+- **Boosted tips (pay-for-prominence)** — a tip of **5+ COOK** is a 🚀 BOOST: it renders with a badge and is pinned to the top of the Crumb Feed above newer small tips. Verifiable on-chain from the same transfer the feed already reads — no backend, no trust. Boost bigger → get seen first.
+- **Referral split** — share links carrying `?via=<address>` route 30% of the protocol fee to the promoter. Growth rail: earn by distributing tip pages.
 
 ### The jar
 

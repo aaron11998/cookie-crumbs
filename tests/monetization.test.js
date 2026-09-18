@@ -49,4 +49,29 @@ for (const s of samples) {
   assert.strictEqual(dec.decode(bytes), s.slice(0, 180));
 }
 
+// --- boosted tips (pay-for-prominence): sorting + badge logic mirrored from app.js ---
+const BOOST_LAMPORTS = 5_000_000_000;
+const isBoost = (r) => r.lamports >= BOOST_LAMPORTS;
+const boostSort = (rows) =>
+  [...rows].sort((a, b) => {
+    const ba = isBoost(a) ? 1 : 0;
+    const bb = isBoost(b) ? 1 : 0;
+    if (ba !== bb) return bb - ba;
+    return b.blockTime - a.blockTime;
+  });
+const boostFirst = boostSort([
+  { lamports: 1_000_000_000, blockTime: 300 },
+  { lamports: 6_000_000_000, blockTime: 100 }, // boost, but older
+  { lamports: 500_000_000, blockTime: 400 },
+  { lamports: 5_000_000_000, blockTime: 200 }, // exactly at threshold = boost
+]);
+assert.deepStrictEqual(
+  boostFirst.map((r) => r.lamports),
+  [5_000_000_000, 6_000_000_000, 500_000_000, 1_000_000_000],
+  "boosts pin to the top (newest boost first), then newest-first for the rest"
+);
+// threshold edge: 5 COOK - 1 lamport is NOT a boost
+assert.ok(!isBoost({ lamports: BOOST_LAMPORTS - 1 }));
+assert.ok(isBoost({ lamports: BOOST_LAMPORTS }));
+
 console.log("ALL CLAW-72 UNIT TESTS PASS");

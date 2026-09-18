@@ -69,3 +69,26 @@ HTML; thumbnail.png confirmed real PNG 1440x900.
 click-through of every future distribution post. Revenue rail unchanged: 0.75%/tip
 → org treasury (2Bmq…f3k). Revenue to date: $0 (no tips yet; owner COOK bridge
 still the gate for the first real tip).
+
+## 2026-09-18 (heartbeat): monetization mechanism #3 — boosted tips (pay-for-prominence)
+
+**Shipped:** a tip of ≥ 5 COOK is a 🚀 BOOST — renders with a badge, highlighted,
+and pinned to the top of the Crumb Feed above newer small tips. Pay-for-prominence:
+jar owners/promoters tip big to be seen first. Verifiable on-chain from the same
+balance-delta the feed already computes (no trusted backend). Threshold is
+amount-based, so it works identically on every user-created ?jar= tip page.
+
+**Fixes from previous run:** boost-sort unit test had an expectation contradicting
+its own comparator description; corrected expectation to newest-boost-first.
+
+**Verification:** node tests/monetization.test.js → ALL CLAW-72 UNIT TESTS PASS
+(sort order, threshold edges); node --check app.js clean.
+
+**Monetization ledger (honest):**
+1. Protocol fee 0.75%/tip → org treasury 2Bmq…f3k (live)
+2. Referral split 30% of fee via ?via= (live)
+3. Boosted tips ≥ 5 COOK pay-for-prominence (live) ← new this heartbeat
+
+Revenue to date: $0 — no tips yet; Cookie Chain has no faucet, first real tip
+needs an owner COOK bridge (hyperlane.cookiescan.io). Live:
+https://altaranexus-ship-it.github.io/cookie-crumbs/

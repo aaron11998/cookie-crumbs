@@ -168,6 +168,17 @@ a { color: var(--crumb); }
 .crumb-msg { color: var(--ink); font-size: 13px; margin-top: 3px; opacity: 0.9; word-break: break-word; }
 .crumb-time { color: var(--dim); font-size: 11px; white-space: nowrap; }
 .crumb-ref { font-size: 11px; cursor: help; opacity: 0.85; }
+.crumb-boost {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+  background: linear-gradient(90deg, #ff8c42, #ffb347);
+  color: #1a1208; border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+  cursor: help;
+}
+.crumb-boosted {
+  background: rgba(255, 179, 71, 0.07);
+  border: 1px solid rgba(255, 179, 71, 0.35);
+  border-radius: 12px; padding: 8px 10px; margin: 0 -10px;
+}
 .feed-note { color: var(--dim); font-size: 11px; margin-top: 12px; line-height: 1.5; }
 .feed-note code { background: var(--bg2); border-radius: 5px; padding: 1px 5px; }
 

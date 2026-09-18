@@ -14,6 +14,12 @@ const COMMUNITY_JAR = "5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8";
 // unrecoverable. Nothing was lost (wallet balance 0, no tips yet).
 const FEE_PUBKEY_STR = "2BmqohyRU8mprrRXtUokCBje52MBKFd3FWNCcsPLJf3k";
 const PROTOCOL_FEE_BPS = 75; // 0.75% protocol fee on each tip -> org treasury
+// Referral split: a share link carrying ?via=<address> routes 30% of the protocol
+// fee to that address. Growth rail — promoters earn by distributing tip pages.
+const REFERRAL_SHARE_PCT = 30;
+// SPL Memo v2 — verified deployed + executable on Cookie Chain (getAccountInfo,
+// slot ~25.7M). Lets tip messages live ON-CHAIN instead of only in the browser.
+const MEMO_PROGRAM_ID_STR = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const REPO_URL = "https://github.com/altaranexus-ship-it/cookie-crumbs";
 const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
@@ -43,6 +49,28 @@ function resolveJar() {
 }
 const JAR = resolveJar();
 const jarPubkey = new PublicKey(JAR.address);
+
+/* ---------- referral (via) resolution ---------- */
+/* ?via=<base58> (or #via=) names a promoter who earns REFERRAL_SHARE_PCT of the
+   protocol fee on every tip from this visit. Invalid/self-referential/treasury
+   refs are ignored — referrals must never change the user's total cost. */
+function resolveVia() {
+  const q = new URLSearchParams(location.search);
+  let raw = (q.get("via") || "").trim();
+  if (!raw && location.hash.startsWith("#via=")) raw = decodeURIComponent(location.hash.slice(5)).trim();
+  if (!raw) return null;
+  try {
+    const pk = new PublicKey(raw);
+    const addr = pk.toBase58();
+    if (addr === FEE_PUBKEY_STR) return null;      // treasury can't refer to itself
+    if (addr === JAR.address) return null;         // jar owner gets tips, not fee share
+    return addr;
+  } catch {
+    return null;
+  }
+}
+const VIA = resolveVia();
+const viaPubkey = VIA ? new PublicKey(VIA) : null;
 
 /* ---------- social card override for personal tip pages ---------- */
 /* Static OG tags (community jar) live in index.html. Crawlers that execute JS
@@ -111,6 +139,18 @@ if (JAR.personal) {
   }
 } else if (JAR.invalid) {
   toast(`"?jar=${JAR.invalid}" is not a valid address — showing the community jar.`, "err", 8000);
+}
+
+/* ---------- referral note ---------- */
+if (VIA) {
+  const sub = document.querySelector(".hero-sub");
+  if (sub) {
+    const note = document.createElement("div");
+    note.className = "fineprint";
+    note.style.marginTop = "8px";
+    note.innerHTML = `🔗 <strong>Referral visit</strong> — part of this page's protocol fee goes to <span class="mono">${shortAddr(VIA, 6)}</span> at no extra cost to you.`;
+    sub.appendChild(note);
+  }
 }
 
 /* ---------- state ---------- */
@@ -252,15 +292,16 @@ async function sendTip() {
     setStatus(amt.err, "err");
     return;
   }
-  const msg = el.message.value.trim().slice(0, 180);
   setBusy(true);
   clearStatus();
   try {
     setStatus("building transaction…", "info");
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-    // 0.75% protocol fee routes to the org's fee wallet on every tip — recurring revenue.
+    // Protocol fee (0.75%) routes to the org treasury on every tip — recurring revenue.
+    // A referral link's ?via= address earns a share of that fee at no cost to the tipper.
     const feeLamports = Math.floor((amt.lamports * PROTOCOL_FEE_BPS) / 10_000);
+    const refLamports = viaPubkey ? Math.floor((feeLamports * REFERRAL_SHARE_PCT) / 100) : 0;
     const jarLamports = amt.lamports - feeLamports;
     const tx = new Transaction({
       feePayer: walletPubkey,
@@ -278,9 +319,28 @@ async function sendTip() {
         SystemProgram.transfer({
           fromPubkey: walletPubkey,
           toPubkey: new PublicKey(FEE_PUBKEY_STR),
-          lamports: feeLamports,
+          lamports: feeLamports - refLamports,
         })
       );
+      if (viaPubkey && refLamports > 0) {
+        tx.add(
+          SystemProgram.transfer({
+            fromPubkey: walletPubkey,
+            toPubkey: viaPubkey,
+            lamports: refLamports,
+          })
+        );
+      }
+    }
+    // On-chain tip message: SPL Memo (v2, deployed on Cookie Chain). One memo per
+    // tip, indexed by explorers — the feed reads it back for everyone.
+    const msg = el.message.value.trim().slice(0, 180);
+    if (msg) {
+      tx.add({
+        programId: new PublicKey(MEMO_PROGRAM_ID_STR),
+        keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+        data: new TextEncoder().encode(msg),
+      });
     }
 
     setStatus("waiting for signature — approve in your wallet…", "info");
@@ -310,7 +370,8 @@ async function sendTip() {
     }
 
     setStatus(
-      `🍪 crumb delivered! tx <a class="mono" href="${EXPLORER}/tx/${signed}" target="_blank" rel="noopener noreferrer">${signed}</a>`,
+      `🍪 crumb delivered! tx <a class="mono" href="${EXPLORER}/tx/${signed}" target="_blank" rel="noopener noreferrer">${signed}</a>` +
+        (msg ? ` — your message is on-chain (memo).` : ``),
       "ok"
     );
     toast("Tip confirmed on Cookie Chain 🍪", "ok");
@@ -347,17 +408,33 @@ async function fetchTips() {
         const post = tx.meta.postBalances[idx] || 0;
         const delta = post - pre;
         if (delta <= 0) return null; // jar -> someone (not a tip)
-        // sender: the account whose balance dropped by delta (+ fee share); first non-jar account with drop >= delta
-        let from = null;
-        for (let i = 0; i < tx.transaction.message.accountKeys.length; i++) {
-          if (i === idx) continue;
-          const drop = (tx.meta.preBalances[i] || 0) - (tx.meta.postBalances[i] || 0);
-          if (drop >= delta) { from = tx.transaction.message.accountKeys[i]; break; }
+        // tipper = first required signer (they fund + sign the memo)
+        const numReq = (tx.transaction.message.header && tx.transaction.message.header.numRequiredSignatures) || 1;
+        const from = numReq > 0 && tx.transaction.message.accountKeys[0] ? tx.transaction.message.accountKeys[0].toBase58() : null;
+        // referral: ?via address received its fee-share in this same tx
+        let referral = null;
+        if (viaPubkey) {
+          for (let i = 0; i < tx.transaction.message.accountKeys.length; i++) {
+            if (tx.transaction.message.accountKeys[i].toBase58() === VIA) {
+              const gained = (tx.meta.postBalances[i] || 0) - (tx.meta.preBalances[i] || 0);
+              if (gained > 0) { referral = VIA; break; }
+            }
+          }
+        }
+        // on-chain message: spl-memo instruction payload (utf-8)
+        let message = null;
+        for (const ins of tx.transaction.message.instructions) {
+          if (ins.programId && ins.programId.toBase58 && ins.programId.toBase58() === MEMO_PROGRAM_ID_STR && ins.data) {
+            if (typeof ins.data === "string") continue; // unexpected encoding — skip rather than garble
+            try { message = new TextDecoder("utf-8").decode(ins.data) || null; } catch (_) { message = null; }
+          }
         }
         return {
           sig: s.signature,
           lamports: delta,
-          from: from ? from.toBase58() : null,
+          from,
+          referral,
+          message,
           blockTime: tx.blockTime || (s.blockTime || 0),
         };
       } catch (_) {
@@ -373,6 +450,8 @@ function renderFeed(rows) {
     el.feed.innerHTML = `<div class="feed-empty">no crumbs yet — be the first to feed the jar 🍪</div>`;
     return;
   }
+  const esc = (s) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   el.feed.innerHTML = rows
     .map(
       (r) => `
@@ -382,10 +461,12 @@ function renderFeed(rows) {
           <div class="crumb-top">
             <span>
               <a class="crumb-from mono" href="${EXPLORER}/address/${r.from || ""}" target="_blank" rel="noopener noreferrer">${shortAddr(r.from || "?")}</a>
+              ${r.referral ? `<span class="crumb-ref" title="referral fee share paid to ${r.referral}">🔗</span>` : ""}
               <span class="crumb-time">${timeAgo(r.blockTime)}</span>
             </span>
             <span class="crumb-amount">+${fmtCook(r.lamports)} COOK</span>
           </div>
+          ${r.message ? `<div class="crumb-msg">${esc(String(r.message).slice(0, 180))}</div>` : ""}
         </div>
       </div>`
     )
@@ -488,12 +569,13 @@ if (ownInput && ownPreview) {
   });
   const copyBtn = document.getElementById("own-copy");
   if (copyBtn) copyBtn.addEventListener("click", async () => {
-    const url = JAR.personal
-      ? `${location.origin}${location.pathname}?jar=${JAR.address}`
-      : `${location.origin}${location.pathname}`;
+    const u = new URL(`${location.origin}${location.pathname}`);
+    if (JAR.personal) u.searchParams.set("jar", JAR.address);
+    if (walletPubkey) u.searchParams.set("via", walletPubkey.toBase58()); // your referral link
+    const url = u.toString();
     try {
       await navigator.clipboard.writeText(url);
-      toast("Link copied — share it anywhere 🍪", "ok");
+      toast(walletPubkey ? "Referral link copied — you earn a fee share on every tip 🍪" : "Link copied — share it anywhere 🍪", "ok");
     } catch {
       toast(url, "info", 9000);
     }

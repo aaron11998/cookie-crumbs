@@ -167,6 +167,7 @@ a { color: var(--crumb); }
 .crumb-from:hover { color: var(--crumb); }
 .crumb-msg { color: var(--ink); font-size: 13px; margin-top: 3px; opacity: 0.9; word-break: break-word; }
 .crumb-time { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.crumb-ref { font-size: 11px; cursor: help; opacity: 0.85; }
 .feed-note { color: var(--dim); font-size: 11px; margin-top: 12px; line-height: 1.5; }
 .feed-note code { background: var(--bg2); border-radius: 5px; padding: 1px 5px; }
 

@@ -114,7 +114,7 @@
           </div>
         </div>
         <input id="amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0.1" value="0.1" />
-        <label for="message">Message <span class="muted">(stored locally with your tip)</span></label>
+        <label for="message">Message <span class="muted">(posted on-chain with your tip)</span></label>
         <textarea id="message" name="message" rows="2" maxlength="180" placeholder="gm cookie chain 🍪"></textarea>
         <button id="tip-submit" class="btn btn-primary btn-big" type="submit">Send tip</button>
         <p class="fineprint">
@@ -134,7 +134,7 @@
         <div class="feed-empty">loading crumbs from the chain…</div>
       </div>
       <div class="feed-note">
-        Feed is read straight from Cookie Chain RPC (<code>getSignaturesForAddress</code> → <code>getTransaction</code>). Messages live in your browser only.
+        Feed is read straight from Cookie Chain RPC (<code>getSignaturesForAddress</code> → <code>getTransaction</code>). Messages are posted on-chain via the SPL Memo program and visible to everyone.
       </div>
     </section>
   </div>

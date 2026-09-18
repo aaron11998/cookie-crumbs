@@ -124,3 +124,19 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
 - Evidence (honest, slot ~25.82M): treasury 0, jar 0, tips 0. Distribution
   post draft updated in x_share_cookiecrumbs.py (266 chars, dry-run OK);
   posting remains owner-gated.
+
+## 2026-09-18 (heartbeat 4) — embeddable tip widget
+- embed.js: one <script> tag puts a Tip button on ANY host site; opens the full
+  tip page in a modal iframe (shadow-DOM button, ?cookie_crumbs=popup deep
+  link, data-jar/data-via attrs, origin-checked postMessage close).
+- "Embed this tip page" card in-app: per-jar copyable snippet (personal jar
+  pre-bound, community default), copy button + docs link.
+- Embed mode (?embed=1): iframe chrome hidden, share/own/embed cards hidden,
+  host page never touches keys, RPC, or tx bytes — distribution surface only.
+- Tests extended (snippet escape/attrs, embed wiring, DOM card): ALL PASS;
+  node --check clean. Commit 09d3b6a pushed to main.
+- Monetization ledger: 1. protocol fee 0.75% -> treasury (live) 2. referral
+  30% via ?via= (live) 3. boosted tips (live) 4. treasury tile (live)
+  5. share-to-earn loop (live) 6. embed widget distribution rail (live).
+- Honest on-chain evidence: treasury 0, jar 0, tips 0 — mechanisms live,
+  demand still unproven; widget lowers the cost of first external embed.

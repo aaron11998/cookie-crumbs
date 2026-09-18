@@ -114,6 +114,8 @@ const el = {
   statTotal: $("stat-total"),
   statTippers: $("stat-tippers"),
   stat24h: $("stat-24h"),
+  statTreasury: $("stat-treasury"),
+  treasuryLink: $("treasury-link"),
   chart: $("chart"),
   status: $("status"),
   form: $("tip-form"),
@@ -551,12 +553,29 @@ function drawChart(rows) {
   ctx.textAlign = "left";
 }
 
+el.treasuryLink.href = `${EXPLORER}/address/${FEE_PUBKEY_STR}`;
+el.treasuryLink.title = `Protocol treasury ${shortAddr(FEE_PUBKEY_STR)} — ${(PROTOCOL_FEE_BPS / 100).toFixed(2)}% of every tip lands here, on-chain`;
+
+/* ---------- protocol treasury readout (live, from RPC) ---------- */
+/* Transparency rail: the fee is the business model, so its balance is public.
+   getBalance on the treasury — cheap, keyless, honest. */
+async function fetchTreasury() {
+  try {
+    const bal = await connection.getBalance(new PublicKey(FEE_PUBKEY_STR));
+    el.statTreasury.textContent = fmtCook(bal);
+    el.statTreasury.title = `${bal.toLocaleString()} lamports`;
+  } catch (_) {
+    el.statTreasury.textContent = "–"; // transient RPC errors must not break the page
+  }
+}
+
 async function refreshFeed() {
   try {
     const rows = await fetchTips();
     feedCache = rows;
     renderFeed(rows);
     renderStats(rows);
+    fetchTreasury(); // fire-and-forget: feed latency must not gate the treasury tile
   } catch (e) {
     console.warn("feed refresh failed", e);
     el.feed.innerHTML = `<div class="feed-empty">couldn't load feed: ${humanError(e)}</div>`;

@@ -92,3 +92,14 @@ its own comparator description; corrected expectation to newest-boost-first.
 Revenue to date: $0 — no tips yet; Cookie Chain has no faucet, first real tip
 needs an owner COOK bridge (hyperlane.cookiescan.io). Live:
 https://altaranexus-ship-it.github.io/cookie-crumbs/
+
+## 2026-09-18 (heartbeat 2) — treasury transparency tile
+- New stat tile "protocol fees" on every tip page: live treasury balance via
+  getBalance(FEE_PUBKEY_STR) on rpc.cookiescan.io, updated on every feed refresh
+  (fire-and-forget, RPC errors degrade to "–" without breaking the page).
+- Tile label links to the treasury on cookiescan.io; tooltip states the 0.75%
+  rate. The fee rail is now publicly auditable in one glance.
+- Unit tests extended: tile DOM presence, el-binding, fetchTreasury wiring,
+  and proof it reads FEE_PUBKEY_STR (not a copied constant). All pass.
+- On-chain evidence (honest): treasury 0 lamports, jar 0 lamports,
+  0 tip txs to date at slot ~25.81M. Mechanisms live, demand not yet shown.

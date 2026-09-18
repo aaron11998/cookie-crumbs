@@ -75,3 +75,19 @@ assert.ok(!isBoost({ lamports: BOOST_LAMPORTS - 1 }));
 assert.ok(isBoost({ lamports: BOOST_LAMPORTS }));
 
 console.log("ALL CLAW-72 UNIT TESTS PASS");
+
+// --- CLAW-72 treasury transparency tile (static wiring checks) ---
+const fs = require("fs");
+const path = require("path");
+const ROOT = path.join(__dirname, "..");
+const appJs = fs.readFileSync(path.join(ROOT, "app.js"), "utf8");
+const indexHtml = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+
+assert.ok(indexHtml.includes('id="stat-treasury"'), "index.html must render the protocol-fees stat tile");
+assert.ok(indexHtml.includes('id="treasury-link"'), "index.html must link the treasury tile to the explorer");
+assert.ok(appJs.includes('statTreasury: $("stat-treasury")'), "app.js must bind the treasury tile element");
+assert.ok(appJs.includes("async function fetchTreasury()"), "app.js must define fetchTreasury()");
+assert.ok(/fetchTreasury\(\);/.test(appJs), "refreshFeed must call fetchTreasury()");
+// treasury tile must read the REAL fee pubkey, not a hardcoded copy
+assert.ok(/getBalance\(new PublicKey\(FEE_PUBKEY_STR\)\)/.test(appJs), "fetchTreasury must read FEE_PUBKEY_STR via getBalance");
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile wiring)");

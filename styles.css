@@ -239,3 +239,38 @@ a { color: var(--crumb); }
 @media (max-width: 640px) {
   .own-actions .btn { width: 100%; }
 }
+
+
+/* ---------- embed this jar ---------- */
+.embed-card { margin-top: 26px; }
+.embed-blurb { margin: 8px 0 14px; }
+.embed-snippet {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 179, 71, 0.25);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+  margin: 0 0 12px;
+  user-select: all;
+}
+.embed-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .embed-actions .btn { width: 100%; }
+}
+
+
+/* ---------- embed mode (?embed=1, loaded inside the widget iframe) ---------- */
+/* Strip the app down to the tipping flow: no topbar chrome, no promo/footer,
+   no flows that only make sense on a full page. */
+html.cc-embed body { padding: 0; }
+html.cc-embed .topbar,
+html.cc-embed .hero,
+html.cc-embed .banner,
+html.cc-embed .own-card,
+html.cc-embed .embed-card,
+html.cc-embed .how-card,
+html.cc-embed .footer { display: none !important; }
+html.cc-embed .wrap { padding: 16px 14px; max-width: 560px; margin: 0 auto; }

@@ -108,3 +108,19 @@ Application addresses (Cookie Chain mainnet, RPC https://rpc.cookiescan.io):
 
 Both are plain system accounts - the app is 100% client-side and custodies nothing.
 Get COOK for your first tip via the community bridge: https://hyperlane.cookiescan.io
+
+## Embed on your site
+
+Put a **Tip 🍪** button on any page with one script tag:
+
+```html
+<script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"></script>
+```
+
+- Add `data-jar="<base58 address>"` to collect tips into **your** jar (omit it to tip the community jar).
+- Add `data-via="<base58 address>"` to credit a promoter's referral fee share on tips from your widget.
+- The button opens the full tip page in an on-site popup; tips are plain on-chain COOK transfers signed by the tipper's own wallet. Your site never touches keys, RPC, or transaction bytes.
+- Deep link: load your page with `?cookie_crumbs=popup` to open the tip flow immediately.
+- JS API: `CookieCrumbs.open()` / `CookieCrumbs.close()` for custom triggers.
+
+Every tip through an embedded widget carries the same 0.75% protocol fee as the hosted app — embedding is the platform's distribution rail.

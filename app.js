@@ -617,6 +617,44 @@ function renderShareRow() {
 }
 renderShareRow();
 
+/* ---------- embed this jar (widget distribution rail) ---------- */
+/* Pure + testable: the <script> snippet a webmaster pastes to put a Tip button
+   (and therefore the protocol's fee rail) on their own site. Personal pages get
+   their own jar embedded; community page embeds the community jar. */
+function buildEmbedSnippet(jar, originBase) {
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const attrs = jar ? `\n  data-jar="${esc(jar)}"` : "";
+  return `<script src="${esc(originBase)}embed.js"${attrs}><\/script>`;
+}
+function renderEmbedCard() {
+  const snippetEl = document.getElementById("embed-snippet");
+  if (!snippetEl) return;
+  const jar = JAR.personal ? JAR.address : null; // community jar = loader default
+  snippetEl.textContent = buildEmbedSnippet(jar, "https://altaranexus-ship-it.github.io/cookie-crumbs/");
+  const copyBtn = document.getElementById("embed-copy");
+  if (copyBtn) copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(snippetEl.textContent);
+      toast("Embed snippet copied — the Tip 🍪 button now tips YOUR jar 🍪", "ok");
+    } catch { toast(snippetEl.textContent, "info", 9000); }
+  };
+}
+renderEmbedCard();
+
+/* ---------- embed mode (?embed=1): the app renders as a widget ---------- */
+/* Loaded inside the widget iframe by embed.js: chrome hidden via CSS, modal
+   bits that are useless in an iframe (share row, own/embed cards, banners,
+   "make your own" flows) stay hidden, closing is POSTmessaged to the host. */
+if (new URLSearchParams(location.search).get("embed") === "1") {
+  document.documentElement.classList.add("cc-embed");
+  window.addEventListener("message", (e) => {
+    if (e.origin !== "https://altaranexus-ship-it.github.io") return;
+    if (e.data === "cookie-crumbs-close") {
+      try { window.close(); } catch {}
+    }
+  });
+}
+
 /* ---------- make-your-own tip page ---------- */
 function validBase58Addr(s) {
   try { return new PublicKey(s.trim()).toBase58(); } catch { return null; }

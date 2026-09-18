@@ -130,3 +130,53 @@ assert.ok(/connectWallet[\s\S]*?renderShareRow\(\);/.test(appJs), "connecting mu
 assert.ok(/disconnectWallet[\s\S]*?renderShareRow\(\);/.test(appJs), "disconnecting must restore the page's own link");
 
 console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile + share row)");
+
+// --- CLAW-72 embeddable widget (distribution rail) ---
+// buildEmbedSnippet is pure — extract + eval it from app.js so behavior is really tested
+const mEmbed = appJs.match(/function buildEmbedSnippet\(jar, originBase\) \{[\s\S]*?\n\}/);
+assert.ok(mEmbed, "app.js must define buildEmbedSnippet(jar, originBase)");
+const buildEmbedSnippet = new Function(`return (${mEmbed[0].replace(/^function buildEmbedSnippet/, "function")})`)();
+
+const SNIPPET_BASE = "https://altaranexus-ship-it.github.io/cookie-crumbs/";
+// personal page: snippet carries that page's jar
+assert.strictEqual(
+  buildEmbedSnippet("JarAddr111", SNIPPET_BASE),
+  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-jar="JarAddr111"></script>',
+  "personal page embed must carry data-jar"
+);
+// community page: no data-jar (loader defaults to community jar)
+assert.strictEqual(
+  buildEmbedSnippet(null, SNIPPET_BASE),
+  '<script src="' + SNIPPET_BASE + 'embed.js"></script>',
+  "community page embed must omit data-jar (loader default)"
+);
+// address containing quotes/&/angle brackets gets escaped inside the attribute
+// (defense in depth — jar addresses are already validated as base58 upstream)
+assert.strictEqual(
+  buildEmbedSnippet('x"y&z<w>', SNIPPET_BASE),
+  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-jar="x&quot;y&amp;z&lt;w&gt;"></script>',
+  "snippet builder must escape quotes/ampersands/angle brackets in interpolated attrs"
+);
+
+// embed.js hygiene: served file must be parseable, self-contained, and expose the API
+const embedJs = fs.readFileSync(path.join(ROOT, "embed.js"), "utf8");
+new Function(embedJs); // syntax check (node parses the whole loader)
+assert.ok(embedJs.includes("data-jar"), "embed.js must read data-jar");
+assert.ok(embedJs.includes("cookie_crumbs"), "embed.js must support the ?cookie_crumbs=popup deep link");
+assert.ok(embedJs.includes("window.CookieCrumbs"), "embed.js must expose window.CookieCrumbs");
+assert.ok(/new URL\(APP_URL\)/.test(embedJs), "widget URL must be built from the canonical APP_URL");
+assert.ok(!/innerHTML\s*=/.test(embedJs), "embed.js must not use innerHTML (XSS surface)");
+
+// wiring: embed card + copy button exist; embed-mode class + iframe-close listener
+assert.ok(indexHtml.includes('id="embed-card"'), "index.html must render the embed card");
+assert.ok(indexHtml.includes('id="embed-snippet"') && indexHtml.includes('id="embed-copy"'), "embed card needs snippet + copy button");
+assert.ok(indexHtml.includes('href="https://github.com/altaranexus-ship-it/cookie-crumbs#embed-on-your-site"'), "embed card must link the embed docs");
+assert.ok(/function renderEmbedCard\(\)/.test(appJs), "app.js must render the embed card");
+assert.ok(/renderEmbedCard\(\);/.test(appJs), "renderEmbedCard must be invoked at startup");
+assert.ok(/classList\.add\("cc-embed"\)/.test(appJs), "embed mode must tag <html> with cc-embed");
+assert.ok(/e\.origin !== "https:\/\/altaranexus-ship-it\.github\.io"/.test(appJs), "iframe close listener must check message origin");
+const stylesCss = fs.readFileSync(path.join(ROOT, "styles.css"), "utf8");
+assert.ok(/html\.cc-embed \.topbar[\s\S]*?display: none/.test(stylesCss), "embed mode CSS must hide the topbar chrome");
+assert.ok(stylesCss.includes(".embed-snippet"), "styles.css must style the embed snippet");
+
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile + share row + embed widget)");

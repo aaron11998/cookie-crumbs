@@ -91,3 +91,42 @@ assert.ok(/fetchTreasury\(\);/.test(appJs), "refreshFeed must call fetchTreasury
 // treasury tile must read the REAL fee pubkey, not a hardcoded copy
 assert.ok(/getBalance\(new PublicKey\(FEE_PUBKEY_STR\)\)/.test(appJs), "fetchTreasury must read FEE_PUBKEY_STR via getBalance");
 console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile wiring)");
+
+// --- CLAW-72 share row (viral referral loop) ---
+// buildShareUrl is pure — extract + eval it from app.js so behavior is really tested
+const mShare = appJs.match(/function buildShareUrl\(current, jar, sharer\) \{[\s\S]*?\n\}/);
+assert.ok(mShare, "app.js must define buildShareUrl(current, jar, sharer)");
+const buildShareUrl = new Function(`return (${mShare[0].replace(/^function buildShareUrl/, "function")})`)();
+
+const BASE = "https://altaranexus-ship-it.github.io/cookie-crumbs/";
+// connected sharer: their own via replaces the page's promoter via
+assert.strictEqual(
+  buildShareUrl(BASE + "?jar=JarAAA&via=PromoterBBB#feed", "JarAAA", "SharerCCC"),
+  BASE + "?jar=JarAAA&via=SharerCCC",
+  "connected sharer's link carries their own ?via="
+);
+// anonymous visitor: no via injected (page promoter link not stolen)
+assert.strictEqual(
+  buildShareUrl(BASE + "?jar=JarAAA&via=PromoterBBB", "JarAAA", null),
+  BASE + "?jar=JarAAA",
+  "anonymous share drops via entirely"
+);
+// sharing your own page: no self-referral
+assert.strictEqual(
+  buildShareUrl(BASE + "?jar=JarAAA", "JarAAA", "JarAAA"),
+  BASE + "?jar=JarAAA",
+  "self-share adds no via"
+);
+// jar param always set; hash stripped
+assert.strictEqual(
+  buildShareUrl(BASE + "#x", "JarDDD", "SharerEEE"),
+  BASE + "?jar=JarDDD&via=SharerEEE",
+  "community page share gets jar + sharer via, hash stripped"
+);
+// wiring: share buttons exist and the row re-renders on connect/disconnect
+assert.ok(indexHtml.includes('id="share-row"'), "index.html must render the share row");
+assert.ok(indexHtml.includes('id="share-copy"') && indexHtml.includes('id="share-x"') && indexHtml.includes('id="share-tg"'), "share row needs copy + X + Telegram buttons");
+assert.ok(/connectWallet[\s\S]*?renderShareRow\(\);/.test(appJs), "connecting must re-render share links with the sharer's via");
+assert.ok(/disconnectWallet[\s\S]*?renderShareRow\(\);/.test(appJs), "disconnecting must restore the page's own link");
+
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile + share row)");

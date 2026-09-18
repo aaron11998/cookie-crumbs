@@ -237,6 +237,7 @@ async function connectWallet() {
     el.connectBtn.title = "Click to disconnect";
     el.netBadge.classList.remove("hidden");
     el.noWallet.classList.add("hidden");
+    renderShareRow(); // links now carry the sharer's own ?via=
     await checkBalance();
     toast(`Connected via ${label}`, "ok");
   } catch (e) {
@@ -253,6 +254,7 @@ function disconnectWallet() {
   el.connectBtn.title = "";
   el.needFunds.classList.add("hidden");
   clearStatus();
+  renderShareRow(); // back to the page's own referral link
 }
 
 async function checkBalance() {
@@ -581,6 +583,39 @@ async function refreshFeed() {
     el.feed.innerHTML = `<div class="feed-empty">couldn't load feed: ${humanError(e)}</div>`;
   }
 }
+
+/* ---------- share this tip page (viral loop) ---------- */
+/* Pure + testable: shareable URL for the current page, with the sharer's own
+   ?via= attached when they're connected (they earn the fee share, the page's
+   existing via — a promoter's link — is preserved for anonymous visitors). */
+function buildShareUrl(current, jar, sharer) {
+  const u = new URL(current);
+  u.searchParams.set("jar", jar);
+  u.searchParams.delete("via");
+  u.hash = "";
+  if (sharer && sharer !== jar) u.searchParams.set("via", sharer);
+  return u.toString();
+}
+function renderShareRow() {
+  const row = document.getElementById("share-row");
+  if (!row) return;
+  const url = buildShareUrl(location.href, JAR.address, walletPubkey ? walletPubkey.toBase58() : null);
+  const text = JAR.personal
+    ? "Tip this jar on Cookie Chain 🍪"
+    : "Cookie Crumbs — the on-chain tip jar for Cookie Chain 🍪";
+  const copyBtn = document.getElementById("share-copy");
+  const x = document.getElementById("share-x");
+  const tg = document.getElementById("share-tg");
+  if (copyBtn) copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(walletPubkey ? "Referral link copied — you earn a fee share on every tip through it 🍪" : "Link copied — share it anywhere 🍪", "ok");
+    } catch { toast(url, "info", 9000); }
+  };
+  if (x) x.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text + "\n" + url);
+  if (tg) tg.href = "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
+}
+renderShareRow();
 
 /* ---------- make-your-own tip page ---------- */
 function validBase58Addr(s) {

@@ -103,3 +103,24 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
   and proof it reads FEE_PUBKEY_STR (not a copied constant). All pass.
 - On-chain evidence (honest): treasury 0 lamports, jar 0 lamports,
   0 tip txs to date at slot ~25.81M. Mechanisms live, demand not yet shown.
+
+## 2026-09-18 (heartbeat 3) — share-this-tip-page viral loop
+- Prior run (e8ec24e3) crashed on a z.ai 429 burst mid-implementation; this
+  run finished, tested, and shipped its WIP.
+- Share row on every tip page: copy link / X intent / Telegram share.
+  buildShareUrl attaches the CONNECTED SHARER'S own ?via= to the link (they
+  earn the 30% fee share on every tip through it); anonymous visitors share
+  a clean link (page promoter not stolen); self-share adds no self-referral.
+  Row re-renders on wallet connect/disconnect.
+- Every user who shares any jar page is now a paid distributor — growth loop
+  is inside the product, not dependent on our own X account.
+- Tests extended: URL logic (via swap / anon strip / self-share / hash strip)
+  evaluated from real app.js source + DOM/wiring asserts. All pass;
+  node --check clean. Commit 10aabae, pushed, Pages build confirmed serving
+  10aabae (builds/latest + live fetch).
+- Monetization ledger: 1. protocol fee 0.75% -> treasury 2Bmqo…f3k (live)
+  2. referral split 30% via ?via= (live) 3. boosted tips >=5 COOK (live)
+  4. treasury transparency tile (live) 5. share-to-earn viral loop (live).
+- Evidence (honest, slot ~25.82M): treasury 0, jar 0, tips 0. Distribution
+  post draft updated in x_share_cookiecrumbs.py (266 chars, dry-run OK);
+  posting remains owner-gated.

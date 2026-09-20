@@ -30,6 +30,14 @@ const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
 const CONFIRM_TIMEOUT_MS = 60_000;
 
+// Premium upgrade: one-time fee (100 COOK) to unlock custom branding + analytics
+// Paid to protocol treasury; verified on-chain via fee-payment memo.
+// Upgraded jars get: custom hero, custom colors, custom CTA, analytics dashboard, no "powered by" badge.
+const PREMIUM_UPGRADE_FEE = 100_000_000_000; // 100 COOK in lamports
+const PREMIUM_MEMO_PREFIX = "cookie-crumbs:premium:";
+const PREMIUM_MEMO_UPGRADE = "upgrade";
+const PREMIUM_MEMO_CUSTOMIZE = "customize";
+
 const { Connection, PublicKey, SystemProgram, Transaction } = solanaWeb3;
 
 const connection = new Connection(RPC_URL, { commitment: "confirmed" });
@@ -133,6 +141,9 @@ el.jarExplorer.href = `${EXPLORER}/address/${JAR.address}`;
 el.jarExplorer.textContent = `${JAR.address.slice(0, 4)}…${JAR.address.slice(-4)}`;
 
 /* ---------- personal tip-page personalization ---------- */
+let jarIsPremium = false;
+let jarOwner = null;
+
 if (JAR.personal) {
   document.title = `Cookie Crumbs — tip this jar on Cookie Chain`;
   const hero = document.querySelector(".hero h1");
@@ -142,8 +153,11 @@ if (JAR.personal) {
     sub.innerHTML = `You're viewing a <strong>personal tip page</strong> for <span class="mono">${shortAddr(JAR.address, 6)}</span> — ` +
       `<a href="${EXPLORER}/address/${JAR.address}" target="_blank" rel="noopener noreferrer">view on explorer</a>. ` +
       `Tips go straight to this address; a 0.75% protocol fee keeps Cookie Crumbs running. ` +
-      `Anyone can make a page like this: append <code>?jar=&lt;any address&gt;</code> to the app URL.`;
+      `Anyone can make a page like this: append <code>?jar=<any address></code> to the app URL.`;
   }
+  
+  // Check for premium status on-chain (async, non-blocking)
+  checkPremiumStatus().catch(e => console.warn("premium check failed", e));
 } else if (JAR.invalid) {
   toast(`"?jar=${JAR.invalid}" is not a valid address — showing the community jar.`, "err", 8000);
 }
@@ -571,6 +585,304 @@ async function fetchTreasury() {
   }
 }
 
+/* ---------- Premium upgrade (monetization mechanism #7) ---------- */
+/* One-time 100 COOK fee paid to protocol treasury; verified on-chain via SPL Memo.
+   Upgraded jars get: custom hero, custom colors, custom CTA, analytics dashboard, no "powered by" badge. */
+
+async function checkPremiumStatus() {
+  if (!JAR.personal) return;
+  
+  try {
+    // Fetch signatures for the treasury looking for premium upgrade memos
+    const sigs = await connection.getSignaturesForAddress(
+      new PublicKey(FEE_PUBKEY_STR),
+      { limit: 100 }
+    );
+    
+    for (const s of sigs) {
+      const tx = await connection.getTransaction(s.signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      if (!tx || !tx.meta) continue;
+      
+      // Check for memo with premium upgrade for this jar
+      for (const ins of tx.transaction.message.instructions) {
+        if (ins.programId && ins.programId.toBase58 && ins.programId.toBase58() === MEMO_PROGRAM_ID_STR && ins.data) {
+          try {
+            const memo = new TextDecoder("utf-8").decode(ins.data);
+            if (memo.startsWith(PREMIUM_MEMO_PREFIX)) {
+              const parts = memo.split(":");
+              // cookie-crumbs:premium:upgrade:<jar_address>
+              // cookie-crumbs:premium:customize:<jar_address>:<json_config>
+              if (parts.length >= 4 && parts[2] === PREMIUM_MEMO_UPGRADE && parts[3] === JAR.address) {
+                jarIsPremium = true;
+                jarOwner = tx.transaction.message.accountKeys[0].toBase58();
+                applyPremiumUI();
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+      if (jarIsPremium) break;
+    }
+  } catch (e) {
+    console.warn("premium status check error", e);
+  }
+}
+
+function applyPremiumUI() {
+  // Remove "powered by" badge
+  const poweredBy = document.querySelector(".fineprint:has(a[href*='github'])");
+  if (poweredBy) poweredBy.style.display = "none";
+  
+  // Custom hero styling
+  const hero = document.querySelector(".hero h1");
+  if (hero) {
+    hero.style.background = "linear-gradient(135deg, #ffd700, #ff8c42, #ffd700)";
+    hero.style.backgroundSize = "200% 200%";
+    hero.style.webkitBackgroundClip = "text";
+    hero.style.webkitTextFillColor = "transparent";
+    hero.style.animation = "shimmer 3s linear infinite";
+  }
+  
+  // Add premium badge
+  const jarHead = document.querySelector(".jar-head");
+  if (jarHead && !jarHead.querySelector(".premium-badge")) {
+    const badge = document.createElement("span");
+    badge.className = "premium-badge";
+    badge.style.cssText = "margin-left:8px;padding:2px 8px;background:linear-gradient(135deg,#ffd700,#ff8c42);color:#2b1608;border-radius:999px;font:600 11px system-ui;animation:pulse 2s infinite";
+    badge.textContent = "✨ PREMIUM";
+    jarHead.appendChild(badge);
+  }
+  
+  // Add custom CTA in the tip form
+  const form = document.getElementById("tip-form");
+  if (form && !form.querySelector(".premium-cta")) {
+    const cta = document.createElement("p");
+    cta.className = "fineprint premium-cta";
+    cta.style.cssText = "color:#ffd700;text-align:center;margin-top:12px";
+    cta.innerHTML = `🎨 This jar is <strong>Premium</strong> — custom branding & analytics enabled. <a href="#" id="customize-link">Customize yours →</a>`;
+    form.appendChild(cta);
+    
+    const customizeLink = document.getElementById("customize-link");
+    if (customizeLink) {
+      customizeLink.onclick = (e) => {
+        e.preventDefault();
+        if (walletPubkey && walletPubkey.toBase58() === jarOwner) {
+          openCustomizeModal();
+        } else {
+          toast("Only the jar owner can customize.", "err");
+        }
+      };
+    }
+  }
+  
+  // Add CSS animations
+  if (!document.getElementById("premium-css")) {
+    const style = document.createElement("style");
+    style.id = "premium-css";
+    style.textContent = `
+      @keyframes shimmer { 0% {background-position: 0% 50%;} 50% {background-position: 100% 50%;} 100% {background-position: 0% 50%;} }
+      @keyframes pulse { 0% {box-shadow: 0 0 0 0 rgba(255,215,0,0.4);} 70% {box-shadow: 0 0 0 10px rgba(255,215,0,0);} 100% {box-shadow: 0 0 0 0 rgba(255,215,0,0);} }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+async function sendUpgrade() {
+  if (!walletPubkey) {
+    await connectWallet();
+    if (!walletPubkey) return;
+  }
+  
+  if (!JAR.personal) {
+    toast("Premium upgrades are only for personal tip pages.", "err");
+    return;
+  }
+  
+  if (walletPubkey.toBase58() !== jarOwner && jarIsPremium) {
+    toast("Only the jar owner can upgrade.", "err");
+    return;
+  }
+  
+  setBusy(true);
+  clearStatus();
+  
+  try {
+    setStatus("building upgrade transaction…", "info");
+    
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    
+    // Premium upgrade fee goes to protocol treasury
+    const feeLamports = PREMIUM_UPGRADE_FEE;
+    const memo = `${PREMIUM_MEMO_PREFIX}${PREMIUM_MEMO_UPGRADE}:${JAR.address}`;
+    
+    const tx = new Transaction({
+      feePayer: walletPubkey,
+      blockhash,
+      lastValidBlockHeight,
+    }).add(
+      SystemProgram.transfer({
+        fromPubkey: walletPubkey,
+        toPubkey: new PublicKey(FEE_PUBKEY_STR),
+        lamports: feeLamports,
+      })
+    ).add({
+      programId: new PublicKey(MEMO_PROGRAM_ID_STR),
+      keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+      data: new TextEncoder().encode(memo),
+    });
+    
+    setStatus("waiting for signature — approve in your wallet…", "info");
+    let signed;
+    if (typeof wallet.signAndSendTransaction === "function") {
+      const resp = await wallet.signAndSendTransaction(tx);
+      signed = resp.signature || resp.sig || resp;
+    } else if (typeof wallet.signTransaction === "function") {
+      const stx = await wallet.signTransaction(tx);
+      setStatus("broadcasting to Cookie Chain…", "info");
+      signed = await connection.sendRawTransaction(stx.serialize(), { skipPreflight: false, maxRetries: 3 });
+    } else {
+      throw new Error("wallet cannot sign transactions");
+    }
+    
+    setStatus(`confirming <span class="mono">${shortAddr(signed, 8)}</span> …`, "info");
+    const confirmed = await Promise.race([
+      connection.confirmTransaction(
+        { signature: signed, blockhash, lastValidBlockHeight },
+        "confirmed"
+      ),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("confirmation timed out after 60s — check the explorer")), CONFIRM_TIMEOUT_MS)),
+    ]);
+    
+    if (confirmed && confirmed.value && confirmed.value.err) {
+      throw new Error(`transaction failed on-chain: ${JSON.stringify(confirmed.value.err)}`);
+    }
+    
+    jarIsPremium = true;
+    jarOwner = walletPubkey.toBase58();
+    applyPremiumUI();
+    
+    setStatus(
+      `✨ Premium unlocked! tx <a class="mono" href="${EXPLORER}/tx/${signed}" target="_blank" rel="noopener noreferrer">${signed}</a>`,
+      "ok"
+    );
+    toast("🎉 Jar upgraded to Premium! Custom branding active.", "ok");
+    
+  } catch (e) {
+    console.warn("upgrade failed", e);
+    setStatus(`❌ ${humanError(e)}`, "err");
+    toast(`Upgrade failed: ${humanError(e)}`, "err", 8000);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function openCustomizeModal() {
+  // Simple modal for premium customization
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.8);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  `;
+  modal.innerHTML = `
+    <div style="background: #1a1a1a; border-radius: 16px; padding: 32px; max-width: 480px; width: 100%; color: #fff; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+      <h2 style="margin: 0 0 24px; font: 700 24px system-ui;">Customize Premium Jar</h2>
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <label style="display:block;font:500 13px system-ui;margin-bottom:8px;color:#ccc">Hero Title</label>
+          <input id="premium-hero" type="text" value="This jar takes crumbs. Tip it directly on-chain." style="width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#0d0d0d;color:#fff;font:14px system-ui;box-sizing:border-box" />
+        </div>
+        <div>
+          <label style="display:block;font:500 13px system-ui;margin-bottom:8px;color:#ccc">Hero Subtitle</label>
+          <textarea id="premium-sub" rows="3" style="width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#0d0d0d;color:#fff;font:14px system-ui;box-sizing:border-box;resize:vertical">You're viewing a personal tip page for ${shortAddr(JAR.address, 6)} — tips go straight to this address; a 0.75% protocol fee keeps Cookie Crumbs running.</textarea>
+        </div>
+        <div>
+          <label style="display:block;font:500 13px system-ui;margin-bottom:8px;color:#ccc">CTA Text (button label)</label>
+          <input id="premium-cta" type="text" value="Send a crumb 🍪" style="width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#0d0d0d;color:#fff;font:14px system-ui;box-sizing:border-box" />
+        </div>
+        <div style="display:flex;gap:12px;margin-top:8px;">
+          <button id="premium-save" style="flex:1;padding:14px;border-radius:8px;border:0;background:linear-gradient(135deg,#ffb347,#ff8a3d);color:#2b1608;font:600 15px system-ui;cursor:pointer">Save Customization</button>
+          <button id="premium-cancel" style="flex:1;padding:14px;border-radius:8px;border:1px solid #333;background:transparent;color:#ccc;font:600 15px system-ui;cursor:pointer">Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  const close = () => modal.remove();
+  document.getElementById("premium-cancel").onclick = close;
+  document.getElementById("premium-save").onclick = async () => {
+    const hero = document.getElementById("premium-hero").value.trim().slice(0, 120);
+    const sub = document.getElementById("premium-sub").value.trim().slice(0, 300);
+    const cta = document.getElementById("premium-cta").value.trim().slice(0, 40);
+    
+    if (!walletPubkey || walletPubkey.toBase58() !== jarOwner) {
+      toast("Only the jar owner can customize.", "err");
+      return;
+    }
+    
+    modal.querySelectorAll("button").forEach(b => b.disabled = true);
+    
+    try {
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      
+      const config = JSON.stringify({ hero, sub, cta });
+      const memo = `${PREMIUM_MEMO_PREFIX}${PREMIUM_MEMO_CUSTOMIZE}:${JAR.address}:${config}`;
+      
+      const tx = new Transaction({
+        feePayer: walletPubkey,
+        blockhash,
+        lastValidBlockHeight,
+      }).add({
+        programId: new PublicKey(MEMO_PROGRAM_ID_STR),
+        keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+        data: new TextEncoder().encode(memo),
+      });
+      
+      let signed;
+      if (typeof wallet.signAndSendTransaction === "function") {
+        const resp = await wallet.signAndSendTransaction(tx);
+        signed = resp.signature || resp.sig || resp;
+      } else if (typeof wallet.signTransaction === "function") {
+        const stx = await wallet.signTransaction(tx);
+        signed = await connection.sendRawTransaction(stx.serialize(), { skipPreflight: false, maxRetries: 3 });
+      } else {
+        throw new Error("wallet cannot sign transactions");
+      }
+      
+      const confirmed = await Promise.race([
+        connection.confirmTransaction({ signature: signed, blockhash, lastValidBlockHeight }, "confirmed"),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("confirmation timed out")), CONFIRM_TIMEOUT_MS)),
+      ]);
+      
+      if (confirmed && confirmed.value && confirmed.value.err) {
+        throw new Error(`transaction failed: ${JSON.stringify(confirmed.value.err)}`);
+      }
+      
+      // Apply customization locally immediately
+      const h = document.querySelector(".hero h1");
+      if (h) h.innerHTML = hero;
+      const s = document.querySelector(".hero-sub");
+      if (s) s.innerHTML = sub;
+      const submitBtn = document.getElementById("tip-submit");
+      if (submitBtn) submitBtn.textContent = cta;
+      
+      toast("Customization saved on-chain!", "ok");
+      close();
+    } catch (e) {
+      console.warn("customize failed", e);
+      toast(`Customize failed: ${humanError(e)}`, "err");
+      modal.querySelectorAll("button").forEach(b => b.disabled = false);
+    }
+  };
+  
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
 async function refreshFeed() {
   try {
     const rows = await fetchTips();
@@ -690,6 +1002,53 @@ if (ownInput && ownPreview) {
 }
 
 /* ---------- misc ---------- */
+el.connectBtn.addEventListener("click", () => (walletPubkey ? disconnectWallet() : connectWallet()));
+el.form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  sendTip();
+});
+el.refresh.addEventListener("click", refreshFeed);
+document.querySelectorAll(".chip").forEach((chip) =>
+  chip.addEventListener("click", () => {
+    el.amount.value = chip.dataset.amt;
+  })
+);
+window.addEventListener("resize", () => renderStats(feedCache));
+
+/* Premium upgrade section visibility */
+function updatePremiumSection() {
+  const section = document.getElementById("premium-upgrade-section");
+  if (!section) return;
+  
+  // Show for personal pages when wallet is connected AND not already premium
+  if (JAR.personal && walletPubkey && !jarIsPremium) {
+    section.classList.remove("hidden");
+  } else {
+    section.classList.add("hidden");
+  }
+}
+
+// Override connectWallet to update premium section
+const originalConnectWallet = connectWallet;
+async function connectWallet() {
+  await originalConnectWallet();
+  updatePremiumSection();
+}
+
+// Override disconnectWallet to update premium section
+const originalDisconnectWallet = disconnectWallet;
+function disconnectWallet() {
+  originalDisconnectWallet();
+  updatePremiumSection();
+}
+
+// Override applyPremiumUI to hide upgrade section
+const originalApplyPremiumUI = applyPremiumUI;
+function applyPremiumUI() {
+  originalApplyPremiumUI();
+  updatePremiumSection();
+}
+
 el.bannerDismiss.addEventListener("click", () => el.noWallet.classList.add("hidden"));
 el.connectBtn.addEventListener("click", () => (walletPubkey ? disconnectWallet() : connectWallet()));
 el.form.addEventListener("submit", (e) => {

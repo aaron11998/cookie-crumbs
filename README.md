@@ -136,7 +136,7 @@ The widget is deployed on every org-owned property — each one is a live distri
 | Site | Widget | Notes |
 |------|--------|-------|
 | [Cookie Crumbs](https://aaron11998.github.io/cookie-crumbs/) | the app itself | community jar, all 10 mechanisms |
-| [Lumenfall](https://aaron11998.github.io/lumenfall/) | "Tip the devs 🍪" (fixed bottom-left) | injected automatically by `build_matrix.sh` on every web export |
+| [Lumenfall](https://aaron11998.github.io/lumenfall-web/) | "Tip the devs 🍪" (fixed bottom-left) | injected automatically by `build_matrix.sh` on every web export |
 | [Aeon Intelligence](https://altaranexus-ship-it.github.io/aeon-intelligence/) | "Tip the desk 🍪" | research-brief audience |
 | [K-Dense Science Lab](https://altaranexus-ship-it.github.io/kdense-science-lab/) | "Support open research 🍪" | storefront audience, promoter share routed to the protocol treasury |
 

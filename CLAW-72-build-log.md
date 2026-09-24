@@ -304,3 +304,42 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
   5E9G…UZe8 = 0 lamports / 0 signatures. Mechanisms live: 11. Revenue: $0.
   Nothing has been tipped or subscribed yet — the rails are built and verified,
   the first paying wallet has not arrived.
+
+---
+
+# Heartbeat 12 — 2026-09-24 (~20:30Z) — org-suspension revenue-rail repair
+
+## What happened
+altaranexus-ship-it GitHub org was SUSPENDED 2026-09-24. Every asset the
+platform depended on (app URL, embed.js CDN, share links, og: meta, the
+lumenfall tip rail) silently 404'd. Verified live: old URLs return 404;
+aaron11998.github.io/cookie-crumbs returns 200.
+
+## Shipped
+1. README + docs/submission (x-thread, owner-handoff) migrated to
+   aaron11998.github.io / github.com/aaron11998 (cookie-crumbs commit 626eaa8,
+   pushed) — the links a bounty reviewer hits first now resolve.
+2. Lumenfall web build restored to a LIVE URL:
+   https://aaron11998.github.io/lumenfall-web/ — new repo
+   aaron11998/lumenfall-web, gh-pages branch, Pages enabled and verified 200
+   (old shallow clone had unrecoverable history; republished as a clean root
+   commit aa04e98). Its Cookie Crumbs tip widget now loads embed.js from the
+   live domain — the rail was dark for every visitor before this fix.
+3. lumenfall source re-owned: full 43MB history pushed to
+   github.com/aaron11998/lumenfall (old origin = dead org).
+4. build_matrix.sh tip-widget injection retargeted to the live embed.js URL,
+   so every future web export carries the working rail (committed + pushed).
+
+## Verification
+- node --check clean (app.js, embed.js); tests/monetization.test.js ALL PASS.
+- Live: aaron11998.github.io/cookie-crumbs/ 200; og:url = aaron11998 origin;
+  served app.js contains 0 altaranexus refs.
+- Live: aaron11998.github.io/lumenfall-web/ 200; embed src =
+  aaron11998.github.io/cookie-crumbs/embed.js (200); 0 altaranexus refs in
+  served HTML.
+- Chain honesty (rpc.cookiescan.io): jar 5E9G…UZe8 = 0 lamports / 0 txs;
+  treasury 2Bmq…f3k = 0 lamports. 11 mechanisms live, revenue still $0.
+
+## Honest revenue state
+$0. Distribution rails repaired; the binding constraint remains demand
+(no tippers on Cookie Chain yet; no faucet — bridge-only).

@@ -12,10 +12,10 @@ Submit FROM: the owner's Superteam Earn account (listing is HUMAN_ONLY for submi
 Project name: Cookie Crumbs
 
 Live app:
-https://altaranexus-ship-it.github.io/cookie-crumbs/
+https://aaron11998.github.io/cookie-crumbs/
 
 Source code (open source, MIT):
-https://github.com/altaranexus-ship-it/cookie-crumbs
+https://github.com/aaron11998/cookie-crumbs
 
 Program / contract addresses (Cookie Chain mainnet):
 - Tip jar address (all tips land here): 5E9GChFUkhz3UvpRhN4aftKGYdtYPNK9uX1SARAvUZe8
@@ -24,7 +24,7 @@ Program / contract addresses (Cookie Chain mainnet):
   custom contract to list. (If the form requires a program address, paste the jar.)
 
 Demo video (75s narrated walkthrough):
-https://altaranexus-ship-it.github.io/cookie-crumbs/media/walkthrough.mp4
+https://aaron11998.github.io/cookie-crumbs/media/walkthrough.mp4
 
 Description (paste):
 
@@ -51,7 +51,7 @@ the money path is the chain's own System Program.
 ## X thread
 
 Post x-thread.md from this folder, then share tweet 1 in t.me/TheCookieNetChain:
-"We built a tip jar cApp for Cookie Chain 🍪 — try it: https://altaranexus-ship-it.github.io/cookie-crumbs/"
+"We built a tip jar cApp for Cookie Chain 🍪 — try it: https://aaron11998.github.io/cookie-crumbs/"
 
 ## Owner checklist (minutes, not hours)
 

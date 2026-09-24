@@ -3,7 +3,8 @@
 A fully on-chain **tip jar cApp for [Cookie Chain](https://www.cookiechain.wtf)** — the community-run SVM.
 Connect a wallet (**Nightly** supported, plus any Solana-standard injected wallet), send a COOK tip with the click of a button, and watch the **Crumb Feed** update straight from chain data.
 
-**Live app:** https://altaranexus-ship-it.github.io/cookie-crumbs/
+**Live app:** https://aaron11998.github.io/cookie-crumbs/
+> Repo republished under `aaron11998` — the original `altaranexus-ship-it` GitHub org was suspended 2026-09-24 (old links 404). Same code, same chain, same jar.
 **Chain:** Cookie Chain mainnet · RPC `https://rpc.cookiescan.io` · Explorer [cookiescan.io](https://cookiescan.io)
 
 ---
@@ -33,7 +34,7 @@ View it on the explorer: https://cookiescan.io/address/5E9GChFUkhz3UvpRhN4aftKGY
 
 ## Walkthrough
 
-Narrated video walkthrough (75s): **https://altaranexus-ship-it.github.io/cookie-crumbs/media/walkthrough.mp4** — also in the repo under `media/walkthrough.mp4`.
+Narrated video walkthrough (75s): **https://aaron11998.github.io/cookie-crumbs/media/walkthrough.mp4** — also in the repo under `media/walkthrough.mp4`.
 
 ## Getting COOK
 
@@ -44,7 +45,7 @@ Cookie Chain has no faucet. Get COOK by bridging from Solana through the communi
 No build step, no dependencies — it's a static site:
 
 ```bash
-git clone https://github.com/altaranexus-ship-it/cookie-crumbs
+git clone https://github.com/aaron11998/cookie-crumbs
 cd cookie-crumbs
 python3 -m http.server 8080
 # open http://localhost:8080
@@ -100,7 +101,7 @@ Mapping of the listing's required features to what ships here:
 | App-specific data and activity | Crumb Feed: per-tip history (sender, amount, message, time) read from chain |
 | Analytics / dashboard | Totals (tips, COOK volume, unique tippers, 24h volume) + 24-hour tips-per-hour chart |
 | CookieScan integration | Deep links to cookiescan.io for every tip, the jar, and fee transactions |
-| Deployed and publicly accessible | https://altaranexus-ship-it.github.io/cookie-crumbs/ (GitHub Pages) |
+| Deployed and publicly accessible | https://aaron11998.github.io/cookie-crumbs/ (GitHub Pages) |
 | Open source + README | This repo; setup in Running locally above |
 
 Application addresses (Cookie Chain mainnet, RPC https://rpc.cookiescan.io):
@@ -116,7 +117,7 @@ Get COOK for your first tip via the community bridge: https://hyperlane.cookiesc
 Put a **Tip 🍪** button on any page with one script tag:
 
 ```html
-<script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"></script>
+<script src="https://aaron11998.github.io/cookie-crumbs/embed.js"></script>
 ```
 
 - Add `data-jar="<base58 address>"` to collect tips into **your** jar (omit it to tip the community jar).
@@ -134,8 +135,8 @@ The widget is deployed on every org-owned property — each one is a live distri
 
 | Site | Widget | Notes |
 |------|--------|-------|
-| [Cookie Crumbs](https://altaranexus-ship-it.github.io/cookie-crumbs/) | the app itself | community jar, all 10 mechanisms |
-| [Lumenfall](https://altaranexus-ship-it.github.io/lumenfall/) | "Tip the devs 🍪" (fixed bottom-left) | injected automatically by `build_matrix.sh` on every web export |
+| [Cookie Crumbs](https://aaron11998.github.io/cookie-crumbs/) | the app itself | community jar, all 10 mechanisms |
+| [Lumenfall](https://aaron11998.github.io/lumenfall/) | "Tip the devs 🍪" (fixed bottom-left) | injected automatically by `build_matrix.sh` on every web export |
 | [Aeon Intelligence](https://altaranexus-ship-it.github.io/aeon-intelligence/) | "Tip the desk 🍪" | research-brief audience |
 | [K-Dense Science Lab](https://altaranexus-ship-it.github.io/kdense-science-lab/) | "Support open research 🍪" | storefront audience, promoter share routed to the protocol treasury |
 
@@ -148,7 +149,7 @@ Upgrade any widget to a **premium embed** and earn **50% of the protocol fee** o
 2. Add your attributes to the script tag:
 
    ```html
-   <script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"
+   <script src="https://aaron11998.github.io/cookie-crumbs/embed.js"
            data-jar="<your jar>"
            data-premium="true"
            data-wallet="<the wallet that paid>"></script>

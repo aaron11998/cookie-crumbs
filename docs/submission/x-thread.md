@@ -11,7 +11,7 @@ t.me/TheCookieNetChain with one line: "We built a tip jar cApp for Cookie Chain 
 Connect your Nightly wallet, send a COOK tip, and watch the Crumb Feed fill up straight from chain data.
 
 Try it 👇
-https://altaranexus-ship-it.github.io/cookie-crumbs/
+https://aaron11998.github.io/cookie-crumbs/
 
 2/ Every tip is a REAL transaction on Cookie Chain — no backend, no custodian.
 
@@ -47,7 +47,7 @@ Docs: https://docs.cookiechain.wtf
 
 6/ Fully open source (MIT):
 
-https://github.com/altaranexus-ship-it/cookie-crumbs
+https://github.com/aaron11998/cookie-crumbs
 
 Try it, send a tip, and see it land in the Crumb Feed instantly. Chain culture belongs on-chain. 🍪⚡
 
@@ -56,4 +56,4 @@ Try it, send a tip, and see it land in the Crumb Feed instantly. Chain culture b
 ---
 
 Attach to tweet 1: media/thumbnail.png (or the app screenshot).
-Video walkthrough if you want it in the thread: https://altaranexus-ship-it.github.io/cookie-crumbs/media/walkthrough.mp4
+Video walkthrough if you want it in the thread: https://aaron11998.github.io/cookie-crumbs/media/walkthrough.mp4

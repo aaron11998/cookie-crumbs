@@ -353,4 +353,206 @@ assert.ok(indexHtml.includes("2 COOK"), "goal-setting price must be visible in t
 // embed widget: host page controls goals, widget stays read-only
 assert.ok(stylesCss.includes("html.cc-embed .goal-set"), "embed widget must hide goal-setting (host page owns the goal)");
 
-console.log("ALL CLAW-72 UNIT TESTS PASS (incl. premium embed subscription + sponsor slots + tip goals)");
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. premium embed subscription + sponsor slots + tip goals + tip splits)");
+
+// ---------- tip splits (mechanism #11): revenue sharing on a plain transfer ----------
+const SPLIT_MEMO_PREFIX = "split:";
+const SPLIT_MIN_BPS = 100;
+const SPLIT_MAX_BPS = 5000;
+const SPLIT_CONFIG_PREFIX = "cookie-crumbs:split:";
+const SPLIT_CONFIG_TIP = 1_000_000;
+const FEE_PUBKEY_STR = "2BmqohyRU8mprrRXtUokCBje52MBKFd3FWNCcsPLJf3k";
+
+// tiny base58 codec so the tests exercise the REAL PublicKey round-trip on
+// genuine addresses instead of string stand-ins.
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58encode(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  let s = "";
+  while (n > 0n) { s = B58[Number(n % 58n)] + s; n /= 58n; }
+  let pad = 0;
+  for (const b of bytes) { if (b === 0) pad++; else break; }
+  return "1".repeat(pad) + s;
+}
+function b58decode(s) {
+  let n = 0n;
+  for (const c of s) {
+    const i = B58.indexOf(c);
+    if (i === -1) throw new Error("bad base58");
+    n = n * 58n + BigInt(i);
+  }
+  const out = [];
+  while (n > 0n) { out.unshift(Number(n % 256n)); n /= 256n; }
+  let pad = 0;
+  for (const c of s) { if (c === "1") pad++; else break; }
+  return Uint8Array.from([...new Array(pad).fill(0), ...out]);
+}
+// PublicKey stand-in with real base58 validation + canonical round-trip
+class FakePublicKey {
+  constructor(v) {
+    if (typeof v === "string") {
+      const bytes = b58decode(v.trim());
+      if (bytes.length !== 32) throw new Error("invalid length");
+      this._b = bytes;
+    } else if (v instanceof Uint8Array && v.length === 32) {
+      this._b = v;
+    } else throw new Error("invalid public key input");
+  }
+  toBase58() { return b58encode(this._b); }
+}
+const mkAddr = (seed) => new FakePublicKey(Uint8Array.from([seed, ...new Array(31).fill(seed)])).toBase58();
+const JAR_ADDR = mkAddr(7);
+const ALICE = mkAddr(11);
+const BOB = mkAddr(23);
+
+// extract the REAL implementations from app.js (no mirrored copies -> no drift)
+const extract = (name, args) => {
+  const re = new RegExp(`function ${name}\\(${args}\\) \\{[\\s\\S]*?\\n\\}`);
+  const m = appJs.match(re);
+  assert.ok(m, `app.js must define ${name}(${args})`);
+  return m[0];
+};
+const splitCtx = new Function(
+  "SPLIT_MEMO_PREFIX", "SPLIT_MIN_BPS", "SPLIT_MAX_BPS", "SPLIT_CONFIG_PREFIX",
+  "PublicKey", "FEE_PUBKEY_STR",
+  `return {
+     parseSplitMemo: ${extract("parseSplitMemo", "memo, jarAddress")},
+     computeSplit: ${extract("computeSplit", "jarLamports, bps")},
+     parseSplitConfigMemo: ${extract("parseSplitConfigMemo", "memo, jarAddress")},
+   };`
+)(SPLIT_MEMO_PREFIX, SPLIT_MIN_BPS, SPLIT_MAX_BPS, SPLIT_CONFIG_PREFIX, FakePublicKey, FEE_PUBKEY_STR);
+const { parseSplitMemo, computeSplit, parseSplitConfigMemo } = splitCtx;
+// resolveSplit composes parseSplitMemo, so its sibling must be in scope
+const resolveSplit = new Function(
+  "parseSplitMemo",
+  `return (${extract("resolveSplit", "message, defaultSplit, jarAddress")})`
+)(parseSplitMemo);
+
+// tipper-authored split memo: happy paths
+assert.deepStrictEqual(parseSplitMemo(`split:2000:${ALICE}`, JAR_ADDR), { bps: 2000, recipient: ALICE });
+assert.deepStrictEqual(parseSplitMemo(`split:100:${ALICE}`, JAR_ADDR), { bps: 100, recipient: ALICE }, "1% floor accepted");
+assert.deepStrictEqual(parseSplitMemo(`split:5000:${ALICE}`, JAR_ADDR), { bps: 5000, recipient: ALICE }, "50% ceiling accepted");
+// non-split memos are ignored (splits must not hijack normal tips)
+assert.strictEqual(parseSplitMemo("gm cookie chain 🍪", JAR_ADDR), null);
+assert.strictEqual(parseSplitMemo("sponsor:Acme Co", JAR_ADDR), null);
+assert.strictEqual(parseSplitMemo(`cookie-crumbs:goal:${JAR_ADDR}:1000`, JAR_ADDR), null);
+assert.strictEqual(parseSplitMemo(null, JAR_ADDR), null, "null memo safe");
+// out-of-range shares rejected (0, negative, >50%, fractional, missing)
+for (const bad of [`split:0:${ALICE}`, `split:-100:${ALICE}`, `split:5001:${ALICE}`, `split:12.5:${ALICE}`, `split::${ALICE}`, `split:abc:${ALICE}`]) {
+  assert.strictEqual(parseSplitMemo(bad, JAR_ADDR), null, `must reject ${bad}`);
+}
+// recipient guards: self-split is a no-op, treasury already takes the fee
+assert.strictEqual(parseSplitMemo(`split:2000:${JAR_ADDR}`, JAR_ADDR), null, "cannot split to the jar itself");
+assert.strictEqual(parseSplitMemo(`split:2000:${FEE_PUBKEY_STR}`, JAR_ADDR), null, "cannot split to the treasury");
+// malformed / non-base58 / non-32-byte recipients rejected
+assert.strictEqual(parseSplitMemo("split:2000:not-an-address", JAR_ADDR), null);
+assert.strictEqual(parseSplitMemo("split:2000:0OIl", JAR_ADDR), null, "ambiguous base58 chars rejected");
+assert.strictEqual(parseSplitMemo(`split:2000:${ALICE}extra`, JAR_ADDR), null);
+// canonicalisation: a padded/whitespace recipient resolves to the canonical address
+assert.deepStrictEqual(parseSplitMemo(`split:2000:  ${ALICE}  `, JAR_ADDR), { bps: 2000, recipient: ALICE });
+
+// the split comes out of the JAR's proceeds — the tipper's cost is untouched
+const jarCut = 100_000_000 - 750_000; // 0.1 COOK minus the 0.75% protocol fee
+const sp = computeSplit(jarCut, 2000);
+assert.strictEqual(sp.recipient, Math.floor((jarCut * 2000) / 10_000));
+assert.strictEqual(sp.jar + sp.recipient, jarCut, "jar + recipient must equal the jar's proceeds");
+assert.strictEqual(sp.jar + sp.recipient + 750_000, 100_000_000, "tipper total cost unchanged by a split");
+assert.deepStrictEqual(computeSplit(jarCut, 5000), { jar: jarCut - Math.floor(jarCut / 2), recipient: Math.floor(jarCut / 2) });
+assert.deepStrictEqual(computeSplit(0, 2000), { jar: 0, recipient: 0 }, "zero proceeds guarded");
+assert.deepStrictEqual(computeSplit(-5, 2000), { jar: 0, recipient: 0 }, "negative proceeds guarded");
+assert.strictEqual(computeSplit(999, 100).recipient, 9, "floors to whole lamports, no fractional dust");
+assert.strictEqual(computeSplit(1, 100).recipient, 0, "sub-100-lamport proceeds produce no split transfer");
+
+// owner-registered default split (config memo)
+assert.deepStrictEqual(
+  parseSplitConfigMemo(`cookie-crumbs:split:${JAR_ADDR}:${BOB}:2500:sound design`, JAR_ADDR),
+  { bps: 2500, recipient: BOB, label: "sound design" }
+);
+assert.deepStrictEqual(
+  parseSplitConfigMemo(`cookie-crumbs:split:${JAR_ADDR}:${BOB}:2500`, JAR_ADDR),
+  { bps: 2500, recipient: BOB, label: "" }
+);
+assert.strictEqual(parseSplitConfigMemo(`cookie-crumbs:split:${ALICE}:${BOB}:2500`, JAR_ADDR), null, "config for another jar ignored");
+assert.strictEqual(parseSplitConfigMemo(`cookie-crumbs:split:${JAR_ADDR}:${JAR_ADDR}:2500`, JAR_ADDR), null, "self-split config rejected");
+assert.strictEqual(parseSplitConfigMemo(`cookie-crumbs:split:${JAR_ADDR}:${BOB}:9000`, JAR_ADDR), null, "90% config rejected");
+assert.strictEqual(parseSplitConfigMemo(`cookie-crumbs:premium:upgrade:${JAR_ADDR}`, JAR_ADDR), null, "non-split config ignored");
+assert.ok(parseSplitConfigMemo(`cookie-crumbs:split:${JAR_ADDR}:${BOB}:2500:${"x".repeat(40)}`, JAR_ADDR).label.length <= 32, "config label capped at 32");
+
+// precedence: an explicit per-tip memo beats the owner's registered default
+const ownerDefault = { bps: 2500, recipient: BOB, label: "" };
+assert.deepStrictEqual(resolveSplit(`split:1000:${ALICE}`, ownerDefault, JAR_ADDR), { bps: 1000, recipient: ALICE }, "tipper memo wins");
+assert.deepStrictEqual(resolveSplit("just a message", ownerDefault, JAR_ADDR), ownerDefault, "default applies otherwise");
+assert.strictEqual(resolveSplit("just a message", null, JAR_ADDR), null, "no split configured -> no split");
+assert.deepStrictEqual(resolveSplit(`split:10:${ALICE}`, ownerDefault, JAR_ADDR), ownerDefault, "invalid memo falls back to the default, not to a bad split");
+
+// the tip transaction must actually carry the split transfer, memo, and fee
+const mSendTip = appJs.match(/async function sendTip\(\) \{[\s\S]*?\n\}/);
+assert.ok(mSendTip, "app.js must define sendTip()");
+assert.ok(/const split = await effectiveSplit\(msg\);/.test(mSendTip[0]), "sendTip must resolve the split before building the tx");
+assert.ok(/SystemProgram\.transfer\(\{[\s\S]*?toPubkey: new PublicKey\(split\.recipient\)/.test(mSendTip[0]), "split tips must transfer to the recipient in the same tx");
+assert.ok(/lamports: splitParts \? splitParts\.jar : jarLamports/.test(mSendTip[0]), "the jar leg must shrink by the split amount");
+assert.ok(/new PublicKey\(FEE_PUBKEY_STR\)/.test(mSendTip[0]), "the 0.75% protocol fee must survive split tips (splits are fee-carrying)");
+assert.ok(/data: new TextEncoder\(\)\.encode\(msg\)/.test(mSendTip[0]), "the split memo must be posted on-chain with the tip");
+
+// owner registration path pays the treasury and writes a parseable config memo
+const mSplitTx = appJs.match(/async function sendSplitConfigTx\(recipient, bps\) \{[\s\S]*?\n\}/);
+assert.ok(mSplitTx, "app.js must define sendSplitConfigTx(recipient, bps)");
+assert.ok(/new PublicKey\(FEE_PUBKEY_STR\)/.test(mSplitTx[0]), "split config must pay the protocol treasury (revenue rail)");
+assert.ok(/SPLIT_CONFIG_PREFIX\}\$\{JAR\.address\}:\$\{recipient\}:\$\{bps\}/.test(mSplitTx[0]), "config tx must carry the parseable split memo");
+
+// read path: the default split is discovered from chain, fail-open
+const mLoad = appJs.match(/async function loadDefaultSplit\(\) \{[\s\S]*?\n\}/);
+assert.ok(mLoad, "app.js must define loadDefaultSplit()");
+assert.ok(/getSignaturesForAddress\(/.test(mLoad[0]) && /MEMO_PROGRAM_ID_STR/.test(mLoad[0]), "default split must be read from treasury history memos");
+assert.ok(/loadDefaultSplit\(\)/.test(appJs), "init must load the default split");
+assert.ok(/updateSplitSection\(\);/.test(appJs), "connect/disconnect must refresh the split section");
+
+// UI wiring
+assert.ok(indexHtml.includes('id="split-note"'), "index.html must disclose the active split to tippers");
+assert.ok(indexHtml.includes('id="split-set-section"'), "index.html must carry the split-setting form");
+assert.ok(indexHtml.includes('id="split-addr-input"') && indexHtml.includes('id="split-bps-input"'), "split form needs recipient + share inputs");
+assert.ok(indexHtml.includes("split:2000:"), "the tipper-authored split memo must be documented in the UI");
+assert.ok(stylesCss.includes(".split-note") && stylesCss.includes(".split-form"), "styles.css must style the split UI");
+assert.ok(/html\.cc-embed \.goal-set/.test(stylesCss) && stylesCss.includes(".split-set { margin"), "embed widget hides owner config; disclosure stays visible");
+console.log("TIP SPLIT LOGIC + WIRING PASS (memo parse, cost invariant, precedence, tx legs, owner config)");
+
+// ---------- goal ledger correctness (mechanism #10 regression fixes) ----------
+const mSum = appJs.match(/function sumTipsSince\(rows, sinceBlockTime\) \{[\s\S]*?\n\}/);
+assert.ok(mSum, "app.js must define sumTipsSince(rows, sinceBlockTime)");
+const sumTipsSince = new Function(`return (${mSum[0]})`)();
+const goalRows = [
+  { lamports: 5_000_000_000, blockTime: 100, message: "early tip" },
+  { lamports: 3_000_000_000, blockTime: 300, message: "later tip" },
+  { lamports: 0, blockTime: 200, message: `cookie-crumbs:goal:${JAR_ADDR}:100000000000` },
+];
+assert.strictEqual(sumTipsSince(goalRows, 200), 3_000_000_000, "only tips at/after the goal tx count toward it");
+assert.strictEqual(sumTipsSince(goalRows, 100), 8_000_000_000, "all tips count when the goal is oldest");
+assert.strictEqual(sumTipsSince([], 0), 0, "empty ledger safe");
+assert.strictEqual(sumTipsSince(undefined, 0), 0, "null rows safe");
+assert.strictEqual(sumTipsSince([{ lamports: 5, blockTime: "nope" }], 0), 0, "non-numeric blockTime ignored");
+
+// goal selection must be newest-by-blockTime, not first-in-array: boosted tips
+// sort to the front, so a stale goal could otherwise override a fresh one
+const mFindGoal = appJs.match(/function findGoalMemos\(rows, jarAddress\) \{[\s\S]*?\n\}/);
+assert.ok(mFindGoal, "app.js must define findGoalMemos(rows, jarAddress)");
+const findGoalMemos = new Function(
+  "parseGoalMemo",
+  `return (${mFindGoal[0]})`
+)(parseGoalMemo);
+const picked = findGoalMemos([
+  { lamports: 1e11, blockTime: 100, message: `cookie-crumbs:goal:${JAR_ADDR}:100:boosted old goal` },
+  { lamports: 1e10, blockTime: 900, message: `cookie-crumbs:goal:${JAR_ADDR}:500:newest goal` },
+], JAR_ADDR);
+assert.strictEqual(picked.lamports, 500, "newest goal by blockTime wins even when a boost sorts first");
+assert.strictEqual(picked.blockTime, 900, "the goal carries its blockTime for the ledger window");
+assert.strictEqual(findGoalMemos([{ lamports: 1, blockTime: 1, message: "no goal here" }], JAR_ADDR), null, "no goal -> null");
+// the wider scan that makes the ledger honest must be wired into fetchTips
+assert.ok(/const FEED_SCAN_LIMIT = 150;/.test(appJs), "app.js must define the wider scan window");
+assert.ok(/ok\.slice\(0, FEED_SCAN_LIMIT\)/.test(appJs), "fetchTips must scan FEED_SCAN_LIMIT txs, not just the rendered rows");
+assert.ok(/const raised = sumTipsSince\(rows, goal\.blockTime\)/.test(appJs), "renderGoal must total tips since the goal was set");
+// empty goal input must not throw (validateAmount returns {ok:false}, never null)
+assert.ok(/!parsed \|\| !parsed\.ok \|\| parsed\.lamports <= 0/.test(appJs), "goal form must guard validateAmount's ok flag");
+console.log("GOAL LEDGER REGRESSION PASS (since-goal totals, newest-goal-by-blockTime, wider scan, input guard)");
+
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. premium embed subscription + sponsor slots + tip goals + tip splits + goal ledger fixes)");

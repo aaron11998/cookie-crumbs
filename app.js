@@ -40,6 +40,10 @@ const SPONSOR_PREFIX = "sponsor:";
 const REPO_URL = "https://github.com/altaranexus-ship-it/cookie-crumbs";
 const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
+// How many recent jar transactions are scanned. The FEED only renders FEED_LIMIT
+// rows, but a tip goal's progress must total ALL tips since the goal was set —
+// scanning more than we render keeps that progress honest (the ledger needs it).
+const FEED_SCAN_LIMIT = 150;
 const CONFIRM_TIMEOUT_MS = 60_000;
 
 // Premium upgrade: one-time fee (100 COOK) to unlock custom branding + analytics
@@ -58,6 +62,22 @@ const PREMIUM_MEMO_CUSTOMIZE = "customize";
 // target for another GOAL_FEE.
 const GOAL_FEE = 2_000_000_000; // 2 COOK per goal set/update
 const GOAL_MEMO_PREFIX = "cookie-crumbs:goal:";
+
+// Tip splits (mechanism #11): a tipper routes a share of the JAR's proceeds to a
+// second wallet in the SAME transaction, by writing `split:<bps>:<recipient>`
+// as the tip memo. Pure client-side arithmetic — no program, no escrow: the
+// transfer is a plain system-program transfer the tipper signs, so it is
+// verifiable on-chain from the tip's own balance deltas. The 0.75% protocol fee
+// is charged identically, so every split tip is still fee-carrying revenue.
+const SPLIT_MEMO_PREFIX = "split:";
+const SPLIT_MIN_BPS = 100;   // 1%
+const SPLIT_MAX_BPS = 5000;  // 50% (of the jar's proceeds, after the protocol fee)
+
+// Split config (owner action): memo `cookie-crumbs:split:<jar>:<recipient>:<bps>[:label]`
+// written by the jar owner, verified on-chain from the treasury's tx history the
+// same way premium/goal config are read. Cost: a 0.001 COOK config tip.
+const SPLIT_CONFIG_PREFIX = "cookie-crumbs:split:";
+const SPLIT_CONFIG_TIP = 1_000_000; // 0.001 COOK — negligible, keeps the tx well-formed
 
 const { Connection, PublicKey, SystemProgram, Transaction } = solanaWeb3;
 
@@ -342,6 +362,12 @@ async function sendTip() {
   try {
     setStatus("building transaction…", "info");
 
+    // Mechanism #11 — resolve any split BEFORE building, so the transaction
+    // carries the recipient transfer and the memo in one atomic payment.
+    let msg = el.message.value.trim().slice(0, 180);
+    if (el.amount.value === "25" && msg && !msg.startsWith(SPONSOR_PREFIX)) msg = SPONSOR_PREFIX + msg;
+    const split = await effectiveSplit(msg);
+
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
     // Protocol fee (0.75%) routes to the org treasury on every tip — recurring revenue.
     // A referral link's ?via= address earns a share of that fee at no cost to the tipper.
@@ -352,6 +378,9 @@ async function sendTip() {
     const refSharePct = getReferralSharePct(premiumActive);
     const refLamports = viaPubkey ? Math.floor((feeLamports * refSharePct) / 100) : 0;
     const jarLamports = amt.lamports - feeLamports;
+    // Split tips: the recipient's cut comes out of the jar's proceeds, so the
+    // tipper's total cost and the protocol fee are both unchanged.
+    const splitParts = split ? computeSplit(jarLamports, split.bps) : null;
     const tx = new Transaction({
       feePayer: walletPubkey,
       blockhash,
@@ -360,9 +389,18 @@ async function sendTip() {
       SystemProgram.transfer({
         fromPubkey: walletPubkey,
         toPubkey: jarPubkey,
-        lamports: jarLamports,
+        lamports: splitParts ? splitParts.jar : jarLamports,
       })
     );
+    if (splitParts && splitParts.recipient > 0) {
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: walletPubkey,
+          toPubkey: new PublicKey(split.recipient),
+          lamports: splitParts.recipient,
+        })
+      );
+    }
     if (feeLamports > 0) {
       tx.add(
         SystemProgram.transfer({
@@ -385,8 +423,7 @@ async function sendTip() {
     // tip, indexed by explorers — the feed reads it back for everyone.
     // Sponsor flow: typing "sponsor:<name>" makes the memo self-marking so the
     // tx doubles as a banner rental without any second transaction.
-    let msg = el.message.value.trim().slice(0, 180);
-    if (el.amount.value === "25" && msg && !msg.startsWith(SPONSOR_PREFIX)) msg = SPONSOR_PREFIX + msg;
+    // (msg was resolved above so a split memo can be honoured in this same tx.)
     if (msg) {
       tx.add({
         programId: new PublicKey(MEMO_PROGRAM_ID_STR),
@@ -446,10 +483,10 @@ async function sendTip() {
 let feedCache = [];
 
 async function fetchTips() {
-  const sigs = await connection.getSignaturesForAddress(jarPubkey, { limit: 50 });
+  const sigs = await connection.getSignaturesForAddress(jarPubkey, { limit: FEED_SCAN_LIMIT });
   const ok = sigs.filter((s) => !s.err);
   const rows = await Promise.all(
-    ok.slice(0, FEED_LIMIT).map(async (s) => {
+    ok.slice(0, FEED_SCAN_LIMIT).map(async (s) => {
       try {
         const tx = await connection.getTransaction(s.signature, {
           commitment: "confirmed",
@@ -951,13 +988,18 @@ function parseGoalMemo(memo, jarAddress) {
   return { lamports, label };
 }
 
-/* Pure: newest valid goal memo from feed rows (rows are newest-first). */
+/* Pure: newest valid goal memo from feed rows. Rows are NOT strictly
+   newest-first (boosted tips sort to the top), so "newest" is decided by
+   blockTime — taking the first match would let an old goal override a new one. */
 function findGoalMemos(rows, jarAddress) {
+  let best = null;
   for (const r of rows || []) {
     const g = parseGoalMemo(r.message, jarAddress);
-    if (g) return g; // rows arrive newest-first; first hit wins
+    if (!g) continue;
+    const bt = typeof r.blockTime === "number" ? r.blockTime : 0;
+    if (!best || bt >= best.blockTime) best = { ...g, blockTime: bt, sig: r.sig };
   }
-  return null;
+  return best;
 }
 
 /* Pure: progress toward a goal. Clamps 0..100; >=100 is "hit". */
@@ -968,6 +1010,216 @@ function computeGoalProgress(raisedLamports, goalLamports) {
   const pct = Math.max(0, Math.min(100, Math.floor((raisedLamports * 100) / goalLamports)));
   return { pct, hit: raisedLamports >= goalLamports };
 }
+
+/* ---------- tip splits (monetization mechanism #11) ---------- */
+/* A shared tip jar with automatic revenue sharing, done with zero contracts.
+   The tipper writes `split:<bps>:<recipient>` as the tip memo and the SAME
+   transaction pays the recipient bps/10000 of the jar's proceeds. The jar owner
+   can register a default split once (`cookie-crumbs:split:<jar>:<recipient>:<bps>`)
+   and every future tipper inherits it by leaving a normal message. */
+
+/* Pure: validate a split memo -> {bps,recipient} or null. Guards the two ways
+   this could go wrong: pointing the split at the jar itself (meaningless) or at
+   the protocol treasury (would double-count fee revenue). */
+function parseSplitMemo(memo, jarAddress) {
+  if (typeof memo !== "string" || !memo.startsWith(SPLIT_MEMO_PREFIX)) return null;
+  const parts = memo.slice(SPLIT_MEMO_PREFIX.length).split(":");
+  const bps = Number(parts[0]);
+  const raw = (parts[1] || "").trim();
+  if (!Number.isInteger(bps) || bps < SPLIT_MIN_BPS || bps > SPLIT_MAX_BPS) return null;
+  try {
+    const recipient = new PublicKey(raw).toBase58();
+    if (recipient === jarAddress) return null;        // split to the jar is a no-op
+    if (recipient === FEE_PUBKEY_STR) return null;    // treasury already takes the fee
+    return { bps, recipient };
+  } catch (_) {
+    return null;
+  }
+}
+
+/* Pure: how a tip's jar-side proceeds divide between jar and split recipient.
+   Never changes what the tipper pays — only where the jar's cut lands. */
+function computeSplit(jarLamports, bps) {
+  if (!Number.isFinite(jarLamports) || jarLamports <= 0) return { jar: 0, recipient: 0 };
+  const recipient = Math.floor((jarLamports * bps) / 10_000);
+  return { jar: jarLamports - recipient, recipient };
+}
+
+/* Pure: parse an owner-registered default split
+   `cookie-crumbs:split:<jar>:<recipient>:<bps>[:label]`. */
+function parseSplitConfigMemo(memo, jarAddress) {
+  if (typeof memo !== "string" || !memo.startsWith(SPLIT_CONFIG_PREFIX)) return null;
+  const parts = memo.slice(SPLIT_CONFIG_PREFIX.length).split(":");
+  if (parts[0] !== jarAddress) return null;
+  const raw = (parts[1] || "").trim();
+  const bps = Number(parts[2]);
+  if (!Number.isInteger(bps) || bps < SPLIT_MIN_BPS || bps > SPLIT_MAX_BPS) return null;
+  try {
+    const recipient = new PublicKey(raw).toBase58();
+    if (recipient === jarAddress || recipient === FEE_PUBKEY_STR) return null;
+    return { bps, recipient, label: parts[3] ? parts.slice(3).join(":").slice(0, 32) : "" };
+  } catch (_) {
+    return null;
+  }
+}
+
+/* Pure: the split a page should advertise — an explicit per-tip memo wins over
+   the owner's registered default. */
+function resolveSplit(message, defaultSplit, jarAddress) {
+  return parseSplitMemo(message, jarAddress) || defaultSplit || null;
+}
+
+/* Effective split for one tip: memo split > owner-registered default. */
+async function effectiveSplit(message) {
+  return parseSplitMemo(message, JAR.address) || jarDefaultSplit;
+}
+
+/* Resolve the owner-registered default split for this jar (runs on page load,
+   reads the treasury history like the premium check does). Fail-open to null. */
+let jarDefaultSplit = null;
+async function loadDefaultSplit() {
+  try {
+    const sigs = await connection.getSignaturesForAddress(
+      new PublicKey(FEE_PUBKEY_STR),
+      { limit: 100 }
+    );
+    for (const s of sigs) {
+      const tx = await connection.getTransaction(s.signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      if (!tx || !tx.meta) continue;
+      for (const ins of tx.transaction.message.instructions) {
+        if (!ins.programId || !ins.programId.toBase58 || ins.programId.toBase58() !== MEMO_PROGRAM_ID_STR || !ins.data) continue;
+        try {
+          const cfg = parseSplitConfigMemo(new TextDecoder("utf-8").decode(ins.data), JAR.address);
+          if (cfg) {
+            jarDefaultSplit = { ...cfg, owner: tx.transaction.message.accountKeys[0].toBase58(), sig: s.signature, blockTime: tx.blockTime || 0 };
+            renderSplitConfig();
+            return;
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    console.warn("default split lookup skipped", e); // fail-open: tipping never blocked
+  }
+}
+
+/* Owner action: register the default split on-chain. A 0.001 COOK tip to the
+   treasury carries the config memo, so the record lives in the tx history the
+   same way premium upgrades and goals do. */
+async function sendSplitConfigTx(recipient, bps) {
+  if (!walletPubkey) {
+    await connectWallet();
+    if (!walletPubkey) return false;
+  }
+  if (!JAR.personal) {
+    toast("A default split needs your own tip page — make one first.", "err");
+    return false;
+  }
+  if (jarDefaultSplit && walletPubkey.toBase58() !== jarDefaultSplit.owner) {
+    toast("Only the jar that registered this split can change it.", "err");
+    return false;
+  }
+  setBusy(true);
+  clearStatus();
+  try {
+    setStatus("building split config…", "info");
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    const memo = `${SPLIT_CONFIG_PREFIX}${JAR.address}:${recipient}:${bps}`;
+    const tx = new Transaction({ feePayer: walletPubkey, blockhash, lastValidBlockHeight })
+      .add(
+        SystemProgram.transfer({
+          fromPubkey: walletPubkey,
+          toPubkey: new PublicKey(FEE_PUBKEY_STR),
+          lamports: SPLIT_CONFIG_TIP,
+        })
+      )
+      .add({
+        programId: new PublicKey(MEMO_PROGRAM_ID_STR),
+        keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+        data: new TextEncoder().encode(memo),
+      });
+    setStatus("waiting for signature — approve in your wallet…", "info");
+    let signed;
+    if (typeof wallet.signAndSendTransaction === "function") {
+      const resp = await wallet.signAndSendTransaction(tx);
+      signed = resp.signature || resp.sig || resp;
+    } else if (typeof wallet.signTransaction === "function") {
+      const stx = await wallet.signTransaction(tx);
+      setStatus("broadcasting to Cookie Chain…", "info");
+      signed = await connection.sendRawTransaction(stx.serialize(), { skipPreflight: false, maxRetries: 3 });
+    } else {
+      throw new Error("wallet cannot sign transactions");
+    }
+    setStatus(`confirming <span class="mono">${shortAddr(signed, 8)}</span> …`, "info");
+    const confirmed = await Promise.race([
+      connection.confirmTransaction({ signature: signed, blockhash, lastValidBlockHeight }, "confirmed"),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("confirmation timed out after 60s — check the explorer")), CONFIRM_TIMEOUT_MS)),
+    ]);
+    if (confirmed && confirmed.value && confirmed.value.err) {
+      throw new Error(`transaction failed on-chain: ${JSON.stringify(confirmed.value.err)}`);
+    }
+    jarDefaultSplit = { bps, recipient, label: "", owner: walletPubkey.toBase58(), sig: signed, blockTime: Math.floor(Date.now() / 1000) };
+    renderSplitConfig();
+    setStatus(`✅ default split registered — <span class="mono">${(bps / 100).toFixed(0)}%</span> of every tip now routes to <span class="mono">${shortAddr(recipient, 6)}</span>`, "ok");
+    toast("Revenue split live on-chain 🍪", "ok");
+    await refreshFeed();
+    return true;
+  } catch (e) {
+    console.warn("split config failed", e);
+    setStatus(`❌ ${humanError(e)}`, "err");
+    toast(`Split config failed: ${humanError(e)}`, "err", 8000);
+    return false;
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* What the page tells tippers about the active split. Disclosure, not config:
+   it stays visible in the embed widget too — a tipper should always be able to
+   see where their tip goes before they sign. */
+function renderSplitConfig() {
+  const note = document.getElementById("split-note");
+  if (!note) return;
+  if (!jarDefaultSplit) {
+    note.classList.add("hidden");
+    note.textContent = "";
+    return;
+  }
+  note.textContent = `💸 ${(jarDefaultSplit.bps / 100).toFixed(0)}% of every tip routes to ${shortAddr(jarDefaultSplit.recipient, 6)} — verifiable on-chain`;
+  note.classList.remove("hidden");
+}
+
+function updateSplitSection() {
+  const set = document.getElementById("split-set-section");
+  if (!set) return;
+  const inEmbed = document.documentElement.classList.contains("cc-embed");
+  const isOwner = walletPubkey && (!jarDefaultSplit || walletPubkey.toBase58() === jarDefaultSplit.owner);
+  if (JAR.personal && walletPubkey && isOwner && !inEmbed) set.classList.remove("hidden");
+  else set.classList.add("hidden");
+}
+
+(function initSplitForm() {
+  const btn = document.getElementById("split-set-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const addrEl = document.getElementById("split-addr-input");
+    const bpsEl = document.getElementById("split-bps-input");
+    let recipient;
+    try { recipient = new PublicKey((addrEl.value || "").trim()).toBase58(); }
+    catch { toast("That's not a valid base58 recipient address.", "err"); return; }
+    if (recipient === JAR.address) { toast("Pick an address other than the jar itself.", "err"); return; }
+    if (recipient === FEE_PUBKEY_STR) { toast("The treasury already takes the protocol fee.", "err"); return; }
+    const pct = Number(bpsEl.value);
+    if (!Number.isFinite(pct) || pct < SPLIT_MIN_BPS / 100 || pct > SPLIT_MAX_BPS / 100) {
+      toast(`Enter a share between ${SPLIT_MIN_BPS / 100}% and ${SPLIT_MAX_BPS / 100}%.`, "err");
+      return;
+    }
+    await sendSplitConfigTx(recipient, Math.round(pct * 100));
+  });
+})();
 
 async function sendGoalTx(goalLamports, goalLabel) {
   if (!walletPubkey) {
@@ -1038,6 +1290,16 @@ async function sendGoalTx(goalLamports, goalLabel) {
   }
 }
 
+/* Pure: lamports raised since a goal was set. Only tips at or after the goal's
+   own tx count — without this, a goal set later would credit every tip that came
+   before it (the goal tx itself is a treasury payment, so it never inflates). */
+function sumTipsSince(rows, sinceBlockTime) {
+  return (rows || []).reduce(
+    (a, r) => (r && typeof r.blockTime === "number" && r.blockTime >= sinceBlockTime ? a + (r.lamports || 0) : a),
+    0
+  );
+}
+
 function renderGoal(rows) {
   const section = document.getElementById("goal-section");
   if (!section) return;
@@ -1046,7 +1308,9 @@ function renderGoal(rows) {
     section.classList.add("hidden");
     return;
   }
-  const raised = (rows || []).reduce((a, r) => a + r.lamports, 0); // memo txs move 0 to the jar
+  // The goal ledger must total every tip since the goal was set, not just the
+  // rows the feed renders — hence the wider scan in fetchTips (FEED_SCAN_LIMIT).
+  const raised = sumTipsSince(rows, goal.blockTime); // memo txs move 0 to the jar
   const { pct, hit } = computeGoalProgress(raised, goal.lamports);
   const label = document.getElementById("goal-label");
   const amounts = document.getElementById("goal-amounts");
@@ -1057,7 +1321,9 @@ function renderGoal(rows) {
   amounts.textContent = `${fmtCook(raised)} / ${fmtCook(goal.lamports)} COOK`;
   fill.style.width = `${pct}%`;
   bar.setAttribute("aria-valuenow", String(pct));
-  status.textContent = hit ? `goal hit — ${fmtCook(raised)} COOK raised 🎉` : `${pct}% there — share this page to move the bar`;
+  const scannedOut = rows.length >= FEED_SCAN_LIMIT && rows[rows.length - 1].blockTime > goal.blockTime;
+  const tail = scannedOut ? ` (totals cover the last ${FEED_SCAN_LIMIT} txs)` : "";
+  status.textContent = (hit ? `goal hit — ${fmtCook(raised)} COOK raised 🎉` : `${pct}% there — share this page to move the bar`) + tail;
   section.classList.remove("hidden");
 }
 
@@ -1081,7 +1347,9 @@ function updateGoalSection() {
     const amountEl = document.getElementById("goal-amount-input");
     const labelEl = document.getElementById("goal-label-input");
     const parsed = validateAmount(amountEl.value);
-    if (!parsed || parsed.lamports <= 0) {
+    // validateAmount returns { ok:false, err } on bad input — it never returns
+    // null, and an unguarded property read threw a TypeError on empty input.
+    if (!parsed || !parsed.ok || parsed.lamports <= 0) {
       toast("Enter a goal amount in COOK (e.g. 100).", "err");
       return;
     }
@@ -1345,20 +1613,22 @@ function updatePremiumSection() {
   }
 }
 
-// Override connectWallet to update premium + goal sections
+// Override connectWallet to update premium + goal + split sections
 const originalConnectWallet = connectWallet;
 async function connectWallet() {
   await originalConnectWallet();
   updatePremiumSection();
   updateGoalSection();
+  updateSplitSection();
 }
 
-// Override disconnectWallet to update premium + goal sections
+// Override disconnectWallet to update premium + goal + split sections
 const originalDisconnectWallet = disconnectWallet;
 function disconnectWallet() {
   originalDisconnectWallet();
   updatePremiumSection();
   updateGoalSection();
+  updateSplitSection();
 }
 
 // Override applyPremiumUI to hide upgrade section
@@ -1404,4 +1674,7 @@ window.addEventListener("resize", () => renderStats(feedCache));
   }
   refreshFeed();
   setInterval(refreshFeed, 30_000); // keep the feed fresh
+  // Owner-registered default revenue split (mechanism #11) — loaded once at boot
+  // so tippers see it before the first tip. Fail-open: a miss just means no split.
+  loadDefaultSplit().then(() => updateSplitSection()).catch(() => {});
 })();

@@ -140,6 +140,20 @@
         <button id="goal-set-btn" class="btn btn-primary" type="button" style="width: 100%;">Set goal (2 COOK to treasury)</button>
       </div>
 
+      <div id="split-note" class="split-note hidden"></div>
+
+      <div id="split-set-section" class="split-set hidden">
+        <p class="fineprint" style="text-align: center; color: #ffd700;">
+          <strong>💸 Split your tips</strong> — route a share of every incoming tip straight to a collaborator
+        </p>
+        <div class="split-form">
+          <input id="split-addr-input" autocomplete="off" spellcheck="false" placeholder="Collaborator wallet address" aria-label="Split recipient address" />
+          <input id="split-bps-input" inputmode="decimal" autocomplete="off" placeholder="Share %, e.g. 20" aria-label="Split share in percent" />
+        </div>
+        <button id="split-set-btn" class="btn btn-primary" type="button" style="width: 100%;">Register split (0.001 COOK to treasury)</button>
+        <p class="fineprint">Applied to every future tip on this page by default. Tippers can also set a one-off split by writing <code>split:2000:&lt;address&gt;</code> as their tip message.</p>
+      </div>
+
       <hr class="sep" />
 
       <h3>Drop a crumb</h3>

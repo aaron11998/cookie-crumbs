@@ -266,3 +266,41 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
   format, refreshFeed wiring, embed read-only). `node --check app.js` clean.
 - Honest revenue state: revenue still $0 — mechanisms live, demand not yet
   shown. Monetization ledger: 10 mechanisms live across 4 fee-carrying surfaces.
+
+## 2026-09-24 (heartbeat 11, this run) — tip splits (mechanism #11) + goal ledger fixes
+
+- Monetization mechanism: **tip splits** — a tip jar that pays its collaborators.
+  A tipper writes `split:<bps>:<recipient>` as the tip memo and the SAME
+  transaction pays the recipient that share of the JAR's proceeds. No program,
+  no escrow, no backend: it is a plain system-program transfer the tipper signs,
+  verifiable from the tip's own balance deltas. The 0.75% protocol fee is
+  charged identically, so split tips remain fee-carrying revenue.
+- Owner-registered default: one 0.001 COOK treasury tx with memo
+  `cookie-crumbs:split:<jar>:<recipient>:<bps>` makes every future tip on that
+  page split by default. Read back from treasury history the same way premium
+  and goal config are; an explicit per-tip memo beats the registered default.
+- Cost invariant: the split comes out of the jar's cut, so the tipper pays
+  exactly the same and the jar owner can never be overpaid. Guards: self-split
+  and treasury-split rejected, 1%..50% bounds, integer bps, canonical base58
+  recipient, fail-open read (a lookup miss never blocks a tip). Disclosure note
+  stays visible inside the embed widget so a tipper always sees where the tip
+  goes before signing.
+- **Defects fixed in mechanism #10's goal ledger** (found while building this):
+  1. `findGoalMemos` returned the first match, but boosted tips sort to the
+     front of the row array — a stale goal could override a newer one. Now
+     newest-by-blockTime.
+  2. `renderGoal` totalled only the 25 rendered feed rows AND credited tips that
+     predate the goal. Now sums only tips since the goal's own blockTime across
+     a wider scan (FEED_SCAN_LIMIT=150), and says so on the bar when the window
+     is exhausted.
+  3. The goal form read `validateAmount()`'s result as if it returned null; it
+     returns {ok:false}, so an empty amount threw a TypeError. Guarded.
+- Tests: 195 assertions ALL PASS (`node tests/monetization.test.js`). Pure logic
+  extracted from app.js and exercised against a real base58 codec (genuine
+  32-byte keys, not stand-ins) plus tx-leg and UI wiring asserts for both
+  mechanisms. `node --check` clean on app.js + embed.js.
+- Honest revenue state at ship time (read LIVE from RPC, slot ~27.01M):
+  protocol treasury 2Bmq…f3k = 0 lamports / 0 signatures; community jar
+  5E9G…UZe8 = 0 lamports / 0 signatures. Mechanisms live: 11. Revenue: $0.
+  Nothing has been tipped or subscribed yet — the rails are built and verified,
+  the first paying wallet has not arrived.

@@ -18,6 +18,8 @@ Connect a wallet (**Nightly** supported, plus any Solana-standard injected walle
 - **Analytics** — everything above is computed client-side from RPC data. No API keys, no database.
 - **Boosted tips (pay-for-prominence)** — a tip of **5+ COOK** is a 🚀 BOOST: it renders with a badge and is pinned to the top of the Crumb Feed above newer small tips. Verifiable on-chain from the same transfer the feed already reads — no backend, no trust. Boost bigger → get seen first.
 - **Referral split** — share links carrying `?via=<address>` route 30% of the protocol fee to the promoter. Growth rail: earn by distributing tip pages.
+- **Tip splits (revenue sharing)** — a tip jar that pays its collaborators. A tipper writes `split:<bps>:<recipient>` as the tip message and the *same transaction* pays that recipient their share of the jar's proceeds — a plain system-program transfer, verifiable on-chain, no program and no escrow. A jar owner can register a default split once (0.001 COOK) so every future tip on that page splits automatically. The split comes out of the jar's cut, so the tipper's cost and the protocol fee are unchanged.
+- **Tip goals** — a page can show a live fundraising progress bar (2 COOK to set, updated on-chain; the goal ledger only counts tips sent after the goal was set).
 
 ### The jar
 

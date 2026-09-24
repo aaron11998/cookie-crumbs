@@ -126,6 +126,18 @@ Put a **Tip 🍪** button on any page with one script tag:
 
 Every tip through an embedded widget carries the same 0.75% protocol fee as the hosted app — embedding is the platform's distribution rail.
 
+### Live deployments (the embed network)
+
+The widget is deployed on every org-owned property — each one is a live distribution rail carrying the protocol fee:
+
+| Site | Widget | Notes |
+|------|--------|-------|
+| [Cookie Crumbs](https://altaranexus-ship-it.github.io/cookie-crumbs/) | the app itself | community jar, all 8 mechanisms |
+| [Lumenfall](https://altaranexus-ship-it.github.io/lumenfall/) | "Tip the devs 🍪" (fixed bottom-left) | injected automatically by `build_matrix.sh` on every web export |
+| [Aeon Intelligence](https://altaranexus-ship-it.github.io/aeon-intelligence/) | "Tip the desk 🍪" | research-brief audience |
+| [K-Dense Science Lab](https://altaranexus-ship-it.github.io/kdense-science-lab/) | "Support open research 🍪" | storefront audience, promoter share routed to the protocol treasury |
+
+
 ### Premium embeds — 1 COOK/month, verified on-chain
 
 Upgrade any widget to a **premium embed** and earn **50% of the protocol fee** on every tip from your site (vs the standard 30% promoter share), plus tip analytics events.

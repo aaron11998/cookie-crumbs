@@ -30,6 +30,13 @@ const BOOST_LAMPORTS = 5_000_000_000; // 5 COOK
 // SPL Memo v2 — verified deployed + executable on Cookie Chain (getAccountInfo,
 // slot ~25.7M). Lets tip messages live ON-CHAIN instead of only in the browser.
 const MEMO_PROGRAM_ID_STR = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+// Sponsor slots: the newest tx to the community jar carrying memo marker
+// `sponsor:<label>` of at least SPONSOR_LAMPORTS owns the sponsor banner for
+// SPONSOR_HOURS. Time-based rental — recurring renewal pressure (vs the one-shot
+// boost), same trusted math as the feed (balance delta + memo, no backend).
+const SPONSOR_LAMPORTS = 25_000_000_000; // 25 COOK per 24h slot
+const SPONSOR_HOURS = 24;
+const SPONSOR_PREFIX = "sponsor:";
 const REPO_URL = "https://github.com/altaranexus-ship-it/cookie-crumbs";
 const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
@@ -367,7 +374,10 @@ async function sendTip() {
     }
     // On-chain tip message: SPL Memo (v2, deployed on Cookie Chain). One memo per
     // tip, indexed by explorers — the feed reads it back for everyone.
-    const msg = el.message.value.trim().slice(0, 180);
+    // Sponsor flow: typing "sponsor:<name>" makes the memo self-marking so the
+    // tx doubles as a banner rental without any second transaction.
+    let msg = el.message.value.trim().slice(0, 180);
+    if (el.amount.value === "25" && msg && !msg.startsWith(SPONSOR_PREFIX)) msg = SPONSOR_PREFIX + msg;
     if (msg) {
       tx.add({
         programId: new PublicKey(MEMO_PROGRAM_ID_STR),
@@ -901,6 +911,7 @@ async function refreshFeed() {
     feedCache = rows;
     renderFeed(rows);
     renderStats(rows);
+    renderSponsorBanner(rows);
     fetchTreasury(); // fire-and-forget: feed latency must not gate the treasury tile
   } catch (e) {
     console.warn("feed refresh failed", e);
@@ -1048,6 +1059,44 @@ function premiumEvent(type, detail) {
   try {
     parent.postMessage({ type: "cookie-crumbs:" + type, detail: detail || null }, "*");
   } catch {}
+}
+
+/* ---------- sponsor slot (rented banner) ---------- */
+/* Pure + testable. The community jar's tip history doubles as the sponsorship
+   ledger: the newest tx of >= SPONSOR_LAMPORTS whose memo starts with
+   "sponsor:" bought SPONSOR_HOURS of banner time starting at its blockTime.
+   Expired slots are invisible — renewing is the recurring-revenue loop. */
+function findActiveSponsor(rows, nowSec) {
+  for (const r of rows) {
+    if (r.lamports < SPONSOR_LAMPORTS) continue;
+    const msg = typeof r.message === "string" ? r.message : "";
+    if (!msg.startsWith(SPONSOR_PREFIX)) continue;
+    const start = r.blockTime || 0;
+    if (nowSec < start || nowSec >= start + SPONSOR_HOURS * 3600) continue;
+    return { label: msg.slice(SPONSOR_PREFIX.length).trim().slice(0, 32), sig: r.sig, start, until: start + SPONSOR_HOURS * 3600 };
+  }
+  return null;
+}
+function renderSponsorBanner(rows) {
+  const banner = document.getElementById("sponsor-banner");
+  if (!banner) return;
+  const slot = JAR.personal ? null : findActiveSponsor(rows, Math.floor(Date.now() / 1000));
+  const label = document.getElementById("sponsor-banner-label");
+  const link = document.getElementById("sponsor-banner-link");
+  if (!slot) {
+    banner.classList.add("hidden");
+    if (label) label.textContent = "";
+    if (link) { link.textContent = ""; link.removeAttribute("href"); }
+    return;
+  }
+  const hrs = Math.max(1, Math.ceil((slot.until - Date.now() / 1000) / 3600));
+  banner.classList.remove("hidden");
+  if (label) label.textContent = slot.label || "anonymous sponsor";
+  if (link) {
+    link.textContent = `rented · ${hrs}h left`;
+    link.href = `${EXPLORER}/tx/${slot.sig}`;
+    link.title = "Sponsor slot is verifiable on-chain — this link opens the renting transaction";
+  }
 }
 
 /* ---------- embed mode (?embed=1): the app renders as a widget ---------- */

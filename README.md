@@ -157,3 +157,13 @@ Upgrade any widget to a **premium embed** and earn **50% of the protocol fee** o
 Why it recurs: verification covers a rolling 30-day window, so keep the 50% share flowing by topping up 1 COOK each month. The payment **is** the subscription.
 
 Premium also unlocks analytics: the widget `postMessage`s `{ type: "cookie-crumbs:tip:open" | "cookie-crumbs:tip:confirm" | "cookie-crumbs:tip:error", detail }` events to your host page (listen for `message` events and filter on the `type` prefix). Non-premium embeds receive no events, and verification fails closed — if the on-chain check can't confirm your payment, the widget silently stays on the standard 30% share.
+
+## Sponsor the banner
+
+The community tip page sells its top banner slot as a **24-hour rental**, settled entirely on-chain:
+
+1. Send a tip of **25+ COOK** to the community jar with the message `sponsor:<your name>` (the **📣 Sponsor 25** chip fills the amount and auto-prefixes the marker for you).
+2. The newest qualifying transaction owns the banner at the top of the page for **24 hours** — your label renders next to a "rented · Nh left" link pointing at the renting transaction on [Cookiescan](https://cookiescan.io).
+3. Renewal is the revenue loop: when the slot expires the banner disappears until someone rents it again.
+
+Like every other number in Cookie Crumbs, sponsorship is verified straight from the ledger (balance delta + SPL Memo) — there is no backend, no database, and nothing to trust but the chain. A sponsor tip is still a tip: the 0.75% protocol fee and any `?via=` referral split apply exactly as usual.

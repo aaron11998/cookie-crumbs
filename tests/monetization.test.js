@@ -234,3 +234,58 @@ assert.ok(indexHtml.includes('id="premium-note"'), "index.html must show hosts t
 assert.ok(indexHtml.includes("1 COOK/month"), "premium offer must state the price");
 
 console.log("ALL CLAW-72 UNIT TESTS PASS (incl. premium embed subscription)");
+
+// --- CLAW-72 sponsor slot rental (mechanism #9): findActiveSponsor extracted from app.js ---
+const SPONSOR_LAMPORTS = 25_000_000_000;
+const SPONSOR_HOURS = 24;
+const SPONSOR_PREFIX = "sponsor:";
+const mSponsor = appJs.match(/function findActiveSponsor\(rows, nowSec\) \{[\s\S]*?\n\}/);
+assert.ok(mSponsor, "app.js must define findActiveSponsor(rows, nowSec)");
+const findActiveSponsor = new Function(
+  "SPONSOR_LAMPORTS", "SPONSOR_HOURS", "SPONSOR_PREFIX",
+  `return (${mSponsor[0].replace(/^function findActiveSponsor/, "function")})`
+)(SPONSOR_LAMPORTS, SPONSOR_HOURS, SPONSOR_PREFIX);
+
+const mkSponsor = (lamports, msg, blockTime) => ({ lamports, message: msg, blockTime, sig: "sig" + blockTime });
+// qualifying tx: newest sponsor: tx inside its 24h window wins
+const sRows = [
+  mkSponsor(1_000_000_000, "regular tip", 1000),
+  mkSponsor(30_000_000_000, "sponsor:Old Co", 2000),        // expired by now=100k
+  mkSponsor(26_000_000_000, "sponsor:New Co", 90_000),      // active, newest
+  mkSponsor(40_000_000_000, "sponsor:Too New", 200_000),    // future — not yet started
+  mkSponsor(5_000_000_000, "boost but big", 95_000),        // >= threshold, no marker
+];
+const slot = findActiveSponsor(sRows, 100_000);
+assert.ok(slot, "an active sponsor slot must be found");
+assert.strictEqual(slot.label, "New Co", "newest qualifying in-window sponsor wins");
+assert.strictEqual(slot.until, 90_000 + 86400, "slot runs SPONSOR_HOURS from blockTime");
+// expiry edges
+assert.strictEqual(findActiveSponsor([mkSponsor(30_000_000_000, "sponsor:X", 0)], 86_400), null, "slot ends exactly at start+24h");
+assert.ok(findActiveSponsor([mkSponsor(30_000_000_000, "sponsor:X", 0)], 86_399), "still active 1s before expiry");
+assert.strictEqual(findActiveSponsor([mkSponsor(30_000_000_000, "sponsor:X", 0)], 86_399).label, "X");
+// future tx not yet valid; boundary now===start is valid
+assert.strictEqual(findActiveSponsor([mkSponsor(30_000_000_000, "sponsor:X", 5_000)], 4_999), null, "future tx cannot sponsor");
+assert.ok(findActiveSponsor([mkSponsor(30_000_000_000, "sponsor:X", 5_000)], 5_000), "tx valid from its own blockTime");
+// below threshold with marker is NOT a sponsor (marker without payment)
+assert.strictEqual(findActiveSponsor([mkSponsor(SPONSOR_LAMPORTS - 1, "sponsor:Freeloader", 100)], 200), null, "under-threshold tx cannot rent");
+// label trimming: prefix stripped, whitespace trimmed, capped at 32
+assert.strictEqual(findActiveSponsor([mkSponsor(25_000_000_000, "sponsor:   Padded Name   ", 0)], 1).label, "Padded Name");
+assert.strictEqual(findActiveSponsor([mkSponsor(25_000_000_000, "sponsor:" + "x".repeat(50), 0)], 1).label, "x".repeat(32));
+assert.strictEqual(findActiveSponsor([mkSponsor(25_000_000_000, "sponsor:", 0)], 1).label, "", "empty label allowed (renders as anonymous)");
+// rows without string messages must not crash
+assert.strictEqual(findActiveSponsor([{ lamports: 30_000_000_000, message: null, blockTime: 0 }], 1), null);
+console.log("SPONSOR SLOT LOGIC PASS (rental window, newest-wins, label handling)");
+
+// wiring: banner + card + chip + embed hiding + feed refresh call
+assert.ok(indexHtml.includes('id="sponsor-banner"'), "index.html must render the sponsor banner");
+assert.ok(indexHtml.includes('id="sponsor-banner-label"') && indexHtml.includes('id="sponsor-banner-link"'), "banner needs label + explorer link");
+assert.ok(indexHtml.includes('id="sponsor-card"'), "index.html must explain the sponsor rental (sponsor-card)");
+assert.ok(indexHtml.includes('chip-sponsor') && indexHtml.includes('data-amt="25"'), "Sponsor 25 chip must exist");
+assert.ok(/function renderSponsorBanner\(rows\)/.test(appJs), "app.js must define renderSponsorBanner(rows)");
+assert.ok(/renderSponsorBanner\(rows\);/.test(appJs), "refreshFeed must call renderSponsorBanner(rows)");
+assert.ok(/msg\.startsWith\(SPONSOR_PREFIX\)/.test(appJs), "sendTip must auto-prefix the sponsor marker at 25 COOK");
+assert.ok(stylesCss.includes(".sponsor-banner"), "styles.css must style the sponsor banner");
+assert.ok(/html\.cc-embed \.sponsor-banner,[\s\S]*?display: none/.test(stylesCss), "embed mode must hide the sponsor banner + card");
+console.log("SPONSOR SLOT WIRING PASS");
+
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile + share row + embed widget + sponsor slots)");

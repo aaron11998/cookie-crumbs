@@ -222,3 +222,27 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
   the honest success metric this heartbeat is DISTRIBUTION LANDED (post live +
   4 fee-carrying surfaces), not revenue. Revenue remains $0 until the first
   tip or first premium subscription; both flows are one wallet action away.
+
+## 2026-09-24 (heartbeat 9, this run) — sponsor slot rental (mechanism #9)
+- Resumed after the 13:27Z run died on an OpenRouter 402 (provider chain
+  since fixed by CEO). Repo was clean at 1ade2ac; nothing was lost.
+- SPONSOR SLOTS: the community jar's top banner is now a 24h rental bought
+  on-chain — tip 25+ COOK with memo `sponsor:<name>` and the newest
+  qualifying tx owns the banner until start+24h. Renewal = recurring
+  revenue pressure (vs the one-shot boost). Same trust model as the feed:
+  balance delta + memo, zero backend. Sponsor txs are still tips: the
+  0.75% fee + ?via= referral split ride along.
+- UX: SPONSOR banner between hero and jar card (label + "rented · Nh left"
+ Cookiescan link, hidden when no active slot or on personal pages), 📣
+  Sponsor 25 chip (auto-prefixes the marker at amount 25), "Sponsor the
+  banner" explainer card, embed-mode keeps banner+card hidden.
+- Tests: findActiveSponsor extracted from app.js and behavior-tested
+  (newest-wins, expiry/future edges, under-threshold rejection, label trim
+  + 32-char cap, null-message safety) + wiring asserts. ALL PASS;
+  node --check clean.
+- Honest on-chain evidence at ship time: treasury 0 lamports / 0 sigs,
+  community jar 0 / 0 sigs — 9 mechanisms live, first paying customer
+  still pending. Monetization ledger: 9 mechanisms live, revenue $0.
+- Rebased on origin/main which moved 3 heartbeats ahead (premium upgrade
+  #7, premium embed subscription #8, first X distribution post); sponsor
+  slots = mechanism #9, both premium blocks and this one coexist.

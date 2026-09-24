@@ -115,6 +115,31 @@
       <canvas id="chart" height="120" aria-label="Tips per hour, last 24h"></canvas>
       <div class="chart-caption">crumbs per hour · last 24h</div>
 
+      <!-- Tip goal: on-chain verified fundraising target + progress bar.
+           Owner pays GOAL_FEE (2 COOK) to the treasury to set it — the fee IS
+           the goal-setting; verification reads the memo from chain. Progress
+           computes from the same tip data the feed already reads. -->
+      <div id="goal-section" class="goal-section hidden">
+        <div class="goal-head">
+          <span id="goal-label" class="goal-label">🎯 Tip goal</span>
+          <span id="goal-amounts" class="goal-amounts mono"></span>
+        </div>
+        <div class="goal-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="goal-fill" class="goal-fill" style="width:0%"></div>
+        </div>
+        <div id="goal-status" class="goal-status"></div>
+      </div>
+      <div id="goal-set-section" class="goal-set hidden">
+        <p class="fineprint" style="text-align: center; color: #ffd700;">
+          <strong>🎯 Set a tip goal</strong> — show a live progress bar on your page (2 COOK)
+        </p>
+        <div class="goal-form">
+          <input id="goal-amount-input" inputmode="decimal" autocomplete="off" placeholder="Goal in COOK, e.g. 100" aria-label="Goal amount in COOK" />
+          <input id="goal-label-input" maxlength="32" autocomplete="off" placeholder="Label (optional), e.g. server costs" aria-label="Goal label" />
+        </div>
+        <button id="goal-set-btn" class="btn btn-primary" type="button" style="width: 100%;">Set goal (2 COOK to treasury)</button>
+      </div>
+
       <hr class="sep" />
 
       <h3>Drop a crumb</h3>

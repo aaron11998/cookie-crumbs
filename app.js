@@ -50,6 +50,15 @@ const PREMIUM_MEMO_PREFIX = "cookie-crumbs:premium:";
 const PREMIUM_MEMO_UPGRADE = "upgrade";
 const PREMIUM_MEMO_CUSTOMIZE = "customize";
 
+// Tip goals (mechanism #9): the jar owner pays GOAL_FEE to the treasury with a
+// memo `cookie-crumbs:goal:<jarAddress>:<goalLamports>[:label]` — the fee IS
+// the goal-setting, verified on-chain (no backend). Every subsequent tip moves
+// the page's progress bar toward the goal, computed from the same balance-delta
+// tips the feed already reads. Newer goal memos win, so owners can update the
+// target for another GOAL_FEE.
+const GOAL_FEE = 2_000_000_000; // 2 COOK per goal set/update
+const GOAL_MEMO_PREFIX = "cookie-crumbs:goal:";
+
 const { Connection, PublicKey, SystemProgram, Transaction } = solanaWeb3;
 
 const connection = new Connection(RPC_URL, { commitment: "confirmed" });
@@ -912,12 +921,174 @@ async function refreshFeed() {
     renderFeed(rows);
     renderStats(rows);
     renderSponsorBanner(rows);
+    renderGoal(rows); // tip-goal bar reads the same rows — one RPC pass for both
     fetchTreasury(); // fire-and-forget: feed latency must not gate the treasury tile
   } catch (e) {
     console.warn("feed refresh failed", e);
     el.feed.innerHTML = `<div class="feed-empty">couldn't load feed: ${humanError(e)}</div>`;
   }
 }
+
+/* ---------- tip goals (monetization mechanism #9) ---------- */
+/* A jar page can carry a fundraising goal: progress bar + label, fed by the
+   SAME tip rows the feed already computes. Setting a goal costs GOAL_FEE paid
+   to the treasury with memo `cookie-crumbs:goal:<jar>:<goalLamports>[:label]`
+   — the fee IS the goal-setting, verified 100% on-chain (no backend, no
+   accounts). Newer goal memo wins, so updating a target costs another fee.
+   Anyone may pay to set a goal on a personal page (fundraising-for-a-friend);
+   griefing costs 2 COOK per try and the owner can override with a newer memo. */
+
+/* Pure: parse `cookie-crumbs:goal:<jar>:<lamports>[:label]` -> {lamports,label}
+   or null. The form strips ":" from labels so the format stays unambiguous;
+   the parser still tolerates labels containing ":" by joining the remainder. */
+function parseGoalMemo(memo, jarAddress) {
+  if (typeof memo !== "string" || !memo.startsWith(GOAL_MEMO_PREFIX)) return null;
+  const parts = memo.slice(GOAL_MEMO_PREFIX.length).split(":");
+  if (parts[0] !== jarAddress) return null;
+  const lamports = Number(parts[1]);
+  if (!Number.isFinite(lamports) || !Number.isInteger(lamports) || lamports <= 0) return null;
+  const label = parts[2] ? parts.slice(2).join(":").slice(0, 32) : "";
+  return { lamports, label };
+}
+
+/* Pure: newest valid goal memo from feed rows (rows are newest-first). */
+function findGoalMemos(rows, jarAddress) {
+  for (const r of rows || []) {
+    const g = parseGoalMemo(r.message, jarAddress);
+    if (g) return g; // rows arrive newest-first; first hit wins
+  }
+  return null;
+}
+
+/* Pure: progress toward a goal. Clamps 0..100; >=100 is "hit". */
+function computeGoalProgress(raisedLamports, goalLamports) {
+  if (!Number.isFinite(raisedLamports) || !Number.isFinite(goalLamports) || goalLamports <= 0) {
+    return { pct: 0, hit: false };
+  }
+  const pct = Math.max(0, Math.min(100, Math.floor((raisedLamports * 100) / goalLamports)));
+  return { pct, hit: raisedLamports >= goalLamports };
+}
+
+async function sendGoalTx(goalLamports, goalLabel) {
+  if (!walletPubkey) {
+    await connectWallet();
+    if (!walletPubkey) return false;
+  }
+  if (!JAR.personal) {
+    toast("Tip goals are only for personal tip pages — make your own first.", "err");
+    return false;
+  }
+  if (jarIsPremium && walletPubkey.toBase58() !== jarOwner) {
+    toast("This jar's owner must set its goal.", "err");
+    return false;
+  }
+  setBusy(true);
+  clearStatus();
+  try {
+    setStatus("building goal transaction…", "info");
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    const memo = `${GOAL_MEMO_PREFIX}${JAR.address}:${goalLamports}${goalLabel ? ":" + goalLabel : ""}`;
+    const tx = new Transaction({ feePayer: walletPubkey, blockhash, lastValidBlockHeight })
+      .add(
+        SystemProgram.transfer({
+          fromPubkey: walletPubkey,
+          toPubkey: new PublicKey(FEE_PUBKEY_STR),
+          lamports: GOAL_FEE,
+        })
+      )
+      .add({
+        programId: new PublicKey(MEMO_PROGRAM_ID_STR),
+        keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+        data: new TextEncoder().encode(memo),
+      });
+    setStatus("waiting for signature — approve in your wallet…", "info");
+    let signed;
+    if (typeof wallet.signAndSendTransaction === "function") {
+      const resp = await wallet.signAndSendTransaction(tx);
+      signed = resp.signature || resp.sig || resp;
+    } else if (typeof wallet.signTransaction === "function") {
+      const stx = await wallet.signTransaction(tx);
+      setStatus("broadcasting to Cookie Chain…", "info");
+      signed = await connection.sendRawTransaction(stx.serialize(), { skipPreflight: false, maxRetries: 3 });
+    } else {
+      throw new Error("wallet cannot sign transactions");
+    }
+    setStatus(`confirming <span class="mono">${shortAddr(signed, 8)}</span> …`, "info");
+    const confirmed = await Promise.race([
+      connection.confirmTransaction({ signature: signed, blockhash, lastValidBlockHeight }, "confirmed"),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("confirmation timed out after 60s — check the explorer")), CONFIRM_TIMEOUT_MS)),
+    ]);
+    if (confirmed && confirmed.value && confirmed.value.err) {
+      throw new Error(`transaction failed on-chain: ${JSON.stringify(confirmed.value.err)}`);
+    }
+    setStatus(
+      `🎯 goal set! tx <a class="mono" href="${EXPLORER}/tx/${signed}" target="_blank" rel="noopener noreferrer">${signed}</a>`,
+      "ok"
+    );
+    toast("Goal is live — every tip now moves the bar 🎯", "ok");
+    await refreshFeed();
+    return true;
+  } catch (e) {
+    console.warn("goal set failed", e);
+    setStatus(`❌ ${humanError(e)}`, "err");
+    toast(`Goal failed: ${humanError(e)}`, "err", 8000);
+    return false;
+  } finally {
+    setBusy(false);
+  }
+}
+
+function renderGoal(rows) {
+  const section = document.getElementById("goal-section");
+  if (!section) return;
+  const goal = findGoalMemos(rows, JAR.address);
+  if (!goal) {
+    section.classList.add("hidden");
+    return;
+  }
+  const raised = (rows || []).reduce((a, r) => a + r.lamports, 0); // memo txs move 0 to the jar
+  const { pct, hit } = computeGoalProgress(raised, goal.lamports);
+  const label = document.getElementById("goal-label");
+  const amounts = document.getElementById("goal-amounts");
+  const fill = document.getElementById("goal-fill");
+  const status = document.getElementById("goal-status");
+  const bar = section.querySelector(".goal-bar");
+  label.textContent = `🎯 ${goal.label || "Tip goal"}`;
+  amounts.textContent = `${fmtCook(raised)} / ${fmtCook(goal.lamports)} COOK`;
+  fill.style.width = `${pct}%`;
+  bar.setAttribute("aria-valuenow", String(pct));
+  status.textContent = hit ? `goal hit — ${fmtCook(raised)} COOK raised 🎉` : `${pct}% there — share this page to move the bar`;
+  section.classList.remove("hidden");
+}
+
+function updateGoalSection() {
+  const set = document.getElementById("goal-set-section");
+  if (!set) return;
+  const inEmbed = document.documentElement.classList.contains("cc-embed");
+  // Community jar: no goal (keep the landing page clean). Embed widget: the
+  // host controls their page, so goal-setting stays on the hosted page only.
+  if (JAR.personal && walletPubkey && !inEmbed) {
+    set.classList.remove("hidden");
+  } else {
+    set.classList.add("hidden");
+  }
+}
+
+(function initGoalForm() {
+  const btn = document.getElementById("goal-set-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const amountEl = document.getElementById("goal-amount-input");
+    const labelEl = document.getElementById("goal-label-input");
+    const parsed = validateAmount(amountEl.value);
+    if (!parsed || parsed.lamports <= 0) {
+      toast("Enter a goal amount in COOK (e.g. 100).", "err");
+      return;
+    }
+    const label = (labelEl.value || "").trim().replace(/:/g, " ").slice(0, 32);
+    await sendGoalTx(parsed.lamports, label);
+  });
+})();
 
 /* ---------- share this tip page (viral loop) ---------- */
 /* Pure + testable: shareable URL for the current page, with the sharer's own
@@ -1174,18 +1345,20 @@ function updatePremiumSection() {
   }
 }
 
-// Override connectWallet to update premium section
+// Override connectWallet to update premium + goal sections
 const originalConnectWallet = connectWallet;
 async function connectWallet() {
   await originalConnectWallet();
   updatePremiumSection();
+  updateGoalSection();
 }
 
-// Override disconnectWallet to update premium section
+// Override disconnectWallet to update premium + goal sections
 const originalDisconnectWallet = disconnectWallet;
 function disconnectWallet() {
   originalDisconnectWallet();
   updatePremiumSection();
+  updateGoalSection();
 }
 
 // Override applyPremiumUI to hide upgrade section

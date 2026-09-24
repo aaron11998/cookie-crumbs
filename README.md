@@ -132,7 +132,7 @@ The widget is deployed on every org-owned property — each one is a live distri
 
 | Site | Widget | Notes |
 |------|--------|-------|
-| [Cookie Crumbs](https://altaranexus-ship-it.github.io/cookie-crumbs/) | the app itself | community jar, all 8 mechanisms |
+| [Cookie Crumbs](https://altaranexus-ship-it.github.io/cookie-crumbs/) | the app itself | community jar, all 10 mechanisms |
 | [Lumenfall](https://altaranexus-ship-it.github.io/lumenfall/) | "Tip the devs 🍪" (fixed bottom-left) | injected automatically by `build_matrix.sh` on every web export |
 | [Aeon Intelligence](https://altaranexus-ship-it.github.io/aeon-intelligence/) | "Tip the desk 🍪" | research-brief audience |
 | [K-Dense Science Lab](https://altaranexus-ship-it.github.io/kdense-science-lab/) | "Support open research 🍪" | storefront audience, promoter share routed to the protocol treasury |
@@ -157,6 +157,16 @@ Upgrade any widget to a **premium embed** and earn **50% of the protocol fee** o
 Why it recurs: verification covers a rolling 30-day window, so keep the 50% share flowing by topping up 1 COOK each month. The payment **is** the subscription.
 
 Premium also unlocks analytics: the widget `postMessage`s `{ type: "cookie-crumbs:tip:open" | "cookie-crumbs:tip:confirm" | "cookie-crumbs:tip:error", detail }` events to your host page (listen for `message` events and filter on the `type` prefix). Non-premium embeds receive no events, and verification fails closed — if the on-chain check can't confirm your payment, the widget silently stays on the standard 30% share.
+
+## Tip goals — 2 COOK per goal
+
+Personal jar pages can carry a fundraising target: a live progress bar fed by the same on-chain tips the feed already reads.
+
+1. Connect the owner wallet on **your own** tip page and use **🎯 Set a tip goal**.
+2. Confirm the transaction: **2 COOK** to the protocol treasury with the memo `cookie-crumbs:goal:<your-jar>:<goal-lamports>[:label]` — the fee IS the goal-setting, verified straight from the ledger.
+3. Every subsequent tip moves the bar. Set a new goal any time for another 2 COOK (newest goal memo wins).
+
+Like everything else in Cookie Crumbs there is no backend: goals, progress, and updates are all read from the chain.
 
 ## Sponsor the banner
 

@@ -289,3 +289,68 @@ assert.ok(/html\.cc-embed \.sponsor-banner,[\s\S]*?display: none/.test(stylesCss
 console.log("SPONSOR SLOT WIRING PASS");
 
 console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile + share row + embed widget + sponsor slots)");
+
+// ---------- tip goals (mechanism #10): paid, on-chain-verified fundraising targets ----------
+const GOAL_MEMO_PREFIX = "cookie-crumbs:goal:";
+function parseGoalMemo(memo, jarAddress) {
+  if (typeof memo !== "string" || !memo.startsWith(GOAL_MEMO_PREFIX)) return null;
+  const parts = memo.slice(GOAL_MEMO_PREFIX.length).split(":");
+  if (parts[0] !== jarAddress) return null;
+  const lamports = Number(parts[1]);
+  if (!Number.isFinite(lamports) || !Number.isInteger(lamports) || lamports <= 0) return null;
+  const label = parts[2] ? parts.slice(2).join(":").slice(0, 32) : "";
+  return { lamports, label };
+}
+function computeGoalProgress(raisedLamports, goalLamports) {
+  if (!Number.isFinite(raisedLamports) || !Number.isFinite(goalLamports) || goalLamports <= 0) {
+    return { pct: 0, hit: false };
+  }
+  const pct = Math.max(0, Math.min(100, Math.floor((raisedLamports * 100) / goalLamports)));
+  return { pct, hit: raisedLamports >= goalLamports };
+}
+const JAR = "JarAddr1111111111111111111111111111111111111";
+// happy path + label
+assert.deepStrictEqual(parseGoalMemo("cookie-crumbs:goal:" + JAR + ":100000000000:server costs", JAR), { lamports: 100000000000, label: "server costs" });
+// no label
+assert.deepStrictEqual(parseGoalMemo("cookie-crumbs:goal:" + JAR + ":5000", JAR), { lamports: 5000, label: "" });
+// wrong jar ignored
+assert.strictEqual(parseGoalMemo("cookie-crumbs:goal:OtherJar:5000", JAR), null);
+// non-goal memos (tips, premium) ignored
+assert.strictEqual(parseGoalMemo("gm cookie chain", JAR), null);
+assert.strictEqual(parseGoalMemo("cookie-crumbs:premium:upgrade:" + JAR, JAR), null);
+// malformed amounts rejected (no NaN / zero / negative / fractional)
+for (const bad of ["cookie-crumbs:goal:" + JAR + ":abc", "cookie-crumbs:goal:" + JAR + ":0", "cookie-crumbs:goal:" + JAR + ":-5", "cookie-crumbs:goal:" + JAR + ":1.5", "cookie-crumbs:goal:" + JAR + ":"]) {
+  assert.strictEqual(parseGoalMemo(bad, JAR), null, `must reject ${bad}`);
+}
+// label with colons tolerated (joined), capped at 32
+const multi = parseGoalMemo("cookie-crumbs:goal:" + JAR + ":100:a:b:c", JAR);
+assert.strictEqual(multi.label, "a:b:c");
+assert.ok(parseGoalMemo("cookie-crumbs:goal:" + JAR + ":100:" + "x".repeat(40), JAR).label.length <= 32);
+// progress math: clamp + hit + guard
+assert.strictEqual(computeGoalProgress(50, 100).pct, 50);
+assert.strictEqual(computeGoalProgress(150, 100).pct, 100);
+assert.strictEqual(computeGoalProgress(150, 100).hit, true);
+assert.strictEqual(computeGoalProgress(99, 100).hit, false);
+assert.strictEqual(computeGoalProgress(0, 100).pct, 0);
+assert.strictEqual(computeGoalProgress(100, 0).pct, 0, "zero goal guarded");
+assert.strictEqual(computeGoalProgress(-5, 100).pct, 0, "negative raised clamped");
+// app.js must contain the exact same pure logic (no drift between test mirror and app)
+assert.ok(appJs.includes('const GOAL_MEMO_PREFIX = "cookie-crumbs:goal:";'), "app.js must define the goal memo prefix");
+const mParse = appJs.match(/function parseGoalMemo\(memo, jarAddress\) \{[\s\S]*?\n\}/);
+assert.ok(mParse, "app.js must define parseGoalMemo(memo, jarAddress)");
+const mProg = appJs.match(/function computeGoalProgress\(raisedLamports, goalLamports\) \{[\s\S]*?\n\}/);
+assert.ok(mProg, "app.js must define computeGoalProgress(raisedLamports, goalLamports)");
+// goal fee actually paid to the treasury (the monetization rail), with a memo tx
+const mGoalTx = appJs.match(/async function sendGoalTx\(goalLamports, goalLabel\) \{[\s\S]*?\n\}/);
+assert.ok(mGoalTx, "app.js must define sendGoalTx");
+assert.ok(/new PublicKey\(FEE_PUBKEY_STR\)/.test(mGoalTx[0]), "goal fee must be paid to the protocol treasury");
+assert.ok(/GOAL_MEMO_PREFIX\}\$\{JAR\.address\}:\$\{goalLamports\}/.test(mGoalTx[0]), "goal tx must carry the parseable goal memo");
+// progress bar renders from feed rows and refreshes with the feed
+assert.ok(/renderGoal\(rows\)/.test(appJs), "refreshFeed must render the goal from feed rows");
+assert.ok(indexHtml.includes('id="goal-section"'), "index.html must carry the goal progress bar");
+assert.ok(indexHtml.includes('id="goal-set-section"'), "index.html must carry the goal-setting form");
+assert.ok(indexHtml.includes("2 COOK"), "goal-setting price must be visible in the UI");
+// embed widget: host page controls goals, widget stays read-only
+assert.ok(stylesCss.includes("html.cc-embed .goal-set"), "embed widget must hide goal-setting (host page owns the goal)");
+
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. premium embed subscription + sponsor slots + tip goals)");

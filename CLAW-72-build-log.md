@@ -246,3 +246,23 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
 - Rebased on origin/main which moved 3 heartbeats ahead (premium upgrade
   #7, premium embed subscription #8, first X distribution post); sponsor
   slots = mechanism #9, both premium blocks and this one coexist.
+
+## 2026-09-24 (heartbeat 10, this run) — tip goals (mechanism #10)
+
+- Monetization mechanism: **paid goal-setting**. A jar owner pays 2 COOK to the
+  protocol treasury with memo `cookie-crumbs:goal:<jar>:<goalLamports>[:label]`;
+  the fee IS the goal-setting, verified 100% on-chain (no backend). Progress bar
+  computes from the same balance-delta tip rows the feed already reads — zero
+  extra RPC. Updating a target costs another fee (newest goal memo wins).
+- Griefing economics: anyone may pay 2 COOK to set a goal on someone's page
+  (fundraising-for-a-friend), but the owner can override with a newer memo —
+  spam costs the griefer 2 COOK per try.
+- Rebase note: rebased onto d1d6cc6 (sponsor slot rental, mechanism #9) which
+  landed while this mechanism was staged. Both coexist: sponsor banner and tip
+  goal bar render from the same feed pass.
+- Tests: `node tests/monetization.test.js` ALL PASS on merged tree — goal memo
+  parsing (wrong-jar, malformed, zero/negative/fractional, colon labels, 32-char
+  cap), progress math (clamp/hit/guards), wiring asserts (treasury payee, memo
+  format, refreshFeed wiring, embed read-only). `node --check app.js` clean.
+- Honest revenue state: revenue still $0 — mechanisms live, demand not yet
+  shown. Monetization ledger: 10 mechanisms live across 4 fee-carrying surfaces.

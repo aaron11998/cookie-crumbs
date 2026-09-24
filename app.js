@@ -17,6 +17,11 @@ const PROTOCOL_FEE_BPS = 75; // 0.75% protocol fee on each tip -> org treasury
 // Referral split: a share link carrying ?via=<address> routes 30% of the protocol
 // fee to that address. Growth rail — promoters earn by distributing tip pages.
 const REFERRAL_SHARE_PCT = 30;
+// Premium embed subscription: host sites pay SUB_LAMPORTS (1 COOK/month) to the
+// treasury (FEE_PUBKEY_STR) from the wallet they paste into the embed snippet.
+// On-chain verification (checkPremiumEmbed) unlocks 50% referral share + analytics.
+const SUB_LAMPORTS = 1_000_000_000; // 1 COOK/month (verified within a rolling 30-day window)
+const PREMIUM_REFERRAL_SHARE_PCT = 50; // 50% of protocol fee for premium embeds (vs 30% standard)
 // Boosted tips: a tip >= BOOST_LAMPORTS is a "boost" — it renders pinned at the
 // top of the feed with a badge. Pay-for-prominence: jar owners/promoters tip big
 // to be seen first. Amount-based, so it is verifiable on-chain from the same
@@ -317,14 +322,19 @@ async function sendTip() {
   }
   setBusy(true);
   clearStatus();
+  premiumEvent("tip:open", { jar: JAR.address, amount: amt.lamports });
   try {
     setStatus("building transaction…", "info");
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
     // Protocol fee (0.75%) routes to the org treasury on every tip — recurring revenue.
     // A referral link's ?via= address earns a share of that fee at no cost to the tipper.
+    // Premium embeds (verified 1 COOK/month host subscription) earn 50% of the fee
+    // instead of 30% — the subscription IS the recurring income; tips still cost the
+    // tipper exactly the same.
     const feeLamports = Math.floor((amt.lamports * PROTOCOL_FEE_BPS) / 10_000);
-    const refLamports = viaPubkey ? Math.floor((feeLamports * REFERRAL_SHARE_PCT) / 100) : 0;
+    const refSharePct = getReferralSharePct(premiumActive);
+    const refLamports = viaPubkey ? Math.floor((feeLamports * refSharePct) / 100) : 0;
     const jarLamports = amt.lamports - feeLamports;
     const tx = new Transaction({
       feePayer: walletPubkey,
@@ -397,6 +407,7 @@ async function sendTip() {
         (msg ? ` — your message is on-chain (memo).` : ``),
       "ok"
     );
+    premiumEvent("tip:confirm", { jar: JAR.address, signature: signed });
     toast("Tip confirmed on Cookie Chain 🍪", "ok");
     lastKnownTip = el.amount.value;
     localStorage.setItem("cc_last_tip", el.amount.value);
@@ -404,6 +415,7 @@ async function sendTip() {
     await refreshFeed();
   } catch (e) {
     console.warn("tip failed", e);
+    premiumEvent("tip:error", { jar: JAR.address, error: String((e && e.message) || e).slice(0, 200) });
     setStatus(`❌ ${humanError(e)}`, "err");
     toast(`Tip failed: ${humanError(e)}`, "err", 8000);
   } finally {
@@ -932,11 +944,16 @@ renderShareRow();
 /* ---------- embed this jar (widget distribution rail) ---------- */
 /* Pure + testable: the <script> snippet a webmaster pastes to put a Tip button
    (and therefore the protocol's fee rail) on their own site. Personal pages get
-   their own jar embedded; community page embeds the community jar. */
+   their own jar embedded; community page embeds the community jar.
+   Premium features: data-wallet for subscription verification, data-premium,
+   data-theme, data-analytics. */
 function buildEmbedSnippet(jar, originBase) {
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const attrs = jar ? `\n  data-jar="${esc(jar)}"` : "";
-  return `<script src="${esc(originBase)}embed.js"${attrs}><\/script>`;
+  // Premium embed: host pastes their wallet — a 1 COOK/month on-chain payment
+  // from that wallet to the treasury unlocks 50% referral share + analytics.
+  const premiumAttrs = `\n  data-premium="true"\n  data-wallet="PASTE_HOST_WALLET_HERE"\n  data-theme="auto"\n  data-analytics="true"`;
+  return `<script src="${esc(originBase)}embed.js"${attrs}${premiumAttrs}><\/script>`;
 }
 function renderEmbedCard() {
   const snippetEl = document.getElementById("embed-snippet");
@@ -952,6 +969,86 @@ function renderEmbedCard() {
   };
 }
 renderEmbedCard();
+
+/* ---------- premium embed subscription ---------- */
+/* Host sites pay 1 COOK/month to the treasury to unlock premium features:
+   - 50% referral share (vs 30% standard) — every tip from their widget pays them more
+   - analytics postMessage events (tip:open / tip:confirm / tip:error)
+   Verification is fully on-chain: checkPremiumEmbed(hostWallet) scans recent
+   payments to the treasury FROM THAT WALLET for one >= SUB_LAMPORTS within the
+   last 30 days. Self-serve: the host pays with any wallet (a single SOL transfer
+   in Phantom/Nightly), pastes its address into the snippet, done. The payment IS
+   the subscription — no accounts, no backend. Recurring because verification
+   expires every 30 days, so hosts who want the 50% share keep paying. Never
+   grants premium based on payments from some OTHER wallet. */
+const PREMIUM_CHECK_WINDOW_S = 30 * 86400;
+async function checkPremiumEmbed(hostWalletStr) {
+  if (!hostWalletStr) return false;
+  let hostPk;
+  try { hostPk = new PublicKey(hostWalletStr); } catch { return false; }
+  try {
+    const subPk = new PublicKey(FEE_PUBKEY_STR); // subscription payments land in the treasury
+    const sigs = await connection.getSignaturesForAddress(subPk, { limit: 200 });
+    const cutoff = Date.now() / 1000 - PREMIUM_CHECK_WINDOW_S;
+    for (const s of sigs) {
+      if (s.blockTime && s.blockTime < cutoff) break; // sigs are newest-first
+      if (s.err) continue;
+      const tx = await connection.getTransaction(s.signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      if (!tx || !tx.meta) continue;
+      const numReq = (tx.transaction.message.header && tx.transaction.message.header.numRequiredSignatures) || 1;
+      const keys = tx.transaction.message.accountKeys.map((k) => k.toBase58());
+      if (numReq < 1 || keys[0] !== hostPk.toBase58()) continue; // must come FROM the host wallet
+      const idx = keys.indexOf(subPk.toBase58());
+      if (idx === -1) continue;
+      const gained = (tx.meta.postBalances[idx] || 0) - (tx.meta.preBalances[idx] || 0);
+      if (gained >= SUB_LAMPORTS) return true;
+    }
+    return false;
+  } catch (e) {
+    console.warn("premium embed check failed", e);
+    return false; // fail-closed: RPC trouble never fakes a subscription
+  }
+}
+
+/* Get referral share % based on premium status */
+function getReferralSharePct(isPremium) {
+  return isPremium ? PREMIUM_REFERRAL_SHARE_PCT : REFERRAL_SHARE_PCT;
+}
+
+/* ---------- premium widget state ---------- */
+/* ?embed=1&premium=1&host_wallet=<base58> (set by embed.js from the data-premium /
+   data-wallet attrs) asks for premium. The verify result is cached for the
+   widget page's lifetime; reloading the widget re-verifies (i.e. monthly). */
+let premiumActive = false;
+(async function initPremium() {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("embed") !== "1" || q.get("premium") !== "1") return;
+    const hostWallet = q.get("host_wallet");
+    const ok = await checkPremiumEmbed(hostWallet);
+    if (!ok) {
+      console.info("[cookie-crumbs] premium requested but subscription not found for", hostWallet);
+      return; // standard 30% share applies; fail-closed
+    }
+    premiumActive = true;
+    console.info("[cookie-crumbs] premium embed active — 50% referral share for host");
+  } catch (e) {
+    console.warn("premium init skipped", e);
+  }
+})();
+
+/* Premium analytics: verified premium embeds get tip events posted to the host
+   page (host listens for window "message" events with data.type "cookie-crumbs:*").
+   Only fires when premiumActive — free embeds get no analytics. */
+function premiumEvent(type, detail) {
+  if (!premiumActive) return;
+  try {
+    parent.postMessage({ type: "cookie-crumbs:" + type, detail: detail || null }, "*");
+  } catch {}
+}
 
 /* ---------- embed mode (?embed=1): the app renders as a widget ---------- */
 /* Loaded inside the widget iframe by embed.js: chrome hidden via CSS, modal

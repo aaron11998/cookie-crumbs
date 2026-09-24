@@ -125,3 +125,23 @@ Put a **Tip 🍪** button on any page with one script tag:
 - JS API: `CookieCrumbs.open()` / `CookieCrumbs.close()` for custom triggers.
 
 Every tip through an embedded widget carries the same 0.75% protocol fee as the hosted app — embedding is the platform's distribution rail.
+
+### Premium embeds — 1 COOK/month, verified on-chain
+
+Upgrade any widget to a **premium embed** and earn **50% of the protocol fee** on every tip from your site (vs the standard 30% promoter share), plus tip analytics events.
+
+1. Send **1 COOK** (one-time per month) from your wallet to the protocol treasury `2BmqohyRU8mprrRXtUokCBje52MBKFd3FWNCcsPLJf3k` — a plain transfer in Nightly/Phantom, memo optional.
+2. Add your attributes to the script tag:
+
+   ```html
+   <script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"
+           data-jar="<your jar>"
+           data-premium="true"
+           data-wallet="<the wallet that paid>"></script>
+   ```
+
+3. That's it — verification is fully on-chain: the widget scans the treasury's recent transactions for a payment of ≥ 1 COOK **from your wallet** within the last 30 days. No account, no API key, no backend.
+
+Why it recurs: verification covers a rolling 30-day window, so keep the 50% share flowing by topping up 1 COOK each month. The payment **is** the subscription.
+
+Premium also unlocks analytics: the widget `postMessage`s `{ type: "cookie-crumbs:tip:open" | "cookie-crumbs:tip:confirm" | "cookie-crumbs:tip:error", detail }` events to your host page (listen for `message` events and filter on the `type` prefix). Non-premium embeds receive no events, and verification fails closed — if the on-chain check can't confirm your payment, the widget silently stays on the standard 30% share.

@@ -9,14 +9,27 @@
  *   <script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"
  *           data-jar="<base58 wallet or jar address>"
  *           data-via="<optional promoter address>"
- *           data-label="<optional button label, default 'Tip 🍪'"></script>
+ *           data-label="<optional button label, default 'Tip 🍪'>"
+ *           data-wallet="<optional host wallet address for premium verification>"
+ *           data-premium="<true|false, forces premium features if sub verified>"
+ *           data-theme="<optional: 'light'|'dark'|'auto', default 'auto'>"
+ *           data-analytics="<true|false, default true for premium>"></script>
  *
  *   - data-jar absent  -> community jar
  *   - data-label       -> custom CTA text (trimmed, capped at 32 chars;
  *                         rendered via textContent so it can never inject HTML)
+ *   - data-wallet      -> host site's wallet address for premium subscription check
+ *   - data-premium     -> if true, widget attempts to verify premium subscription
+ *   - data-theme       -> button theme (host-site controlled)
+ *   - data-analytics   -> fires postMessage with tip events to host page
  *   - ?cookie_crumbs=popup on the HOST page opens the widget immediately
  *     (lets a host site deep-link straight into the tipping flow)
  *   - data-via credits a promoter's referral share on tips from the widget
+ *
+ * Premium features (require verified 1 COOK/month subscription to SUB_PUBKEY_STR):
+ *   - 50% referral share (vs 30% standard) — host earns more on every tip
+ *   - Custom branding via data-theme
+ *   - Analytics events via postMessage (tip:open, tip:confirm, tip:error)
  *
  * Everything is namespaced under window.CookieCrumbs and styled via a shadow
  * DOM host so host-site CSS can't clash with the button.
@@ -49,20 +62,16 @@
     return null;
   }
 
-  function buildWidgetUrl(jar, via, current) {
+  function buildWidgetUrl(jar, via, current, ref, premium, hostWallet, theme, analytics) {
     var u = new URL(APP_URL);
     if (jar) u.searchParams.set("jar", jar);
     if (via) u.searchParams.set("via", via);
+    if (ref) u.searchParams.set("ref", ref);
+    if (premium) u.searchParams.set("premium", "1");
+    if (hostWallet) u.searchParams.set("host_wallet", hostWallet);
+    if (theme && theme !== "auto") u.searchParams.set("theme", theme);
+    if (analytics) u.searchParams.set("analytics", "1");
     u.searchParams.set("embed", "1");
-    // referrer: the widget tells the tip page which site it lives on (display
-    // only — no functional dependence, tip flow works without it)
-    try {
-      if (current && new URL(current).host && current.indexOf("http") === 0) {
-        u.searchParams.set("ref", new URL(current).host);
-      }
-    } catch (e) {
-      /* non-URL current — skip ref */
-    }
     return u.toString();
   }
 
@@ -152,7 +161,7 @@
     btn.textContent = label;
     btn.title = "Tip with Cookie Crumbs — fully on-chain";
     btn.addEventListener("click", function () {
-      openModal(buildWidgetUrl(jar, via, location.href));
+      openModal(buildWidgetUrl(jar, via, location.href, ref, premium, hostWallet, theme, analytics));
     });
     shadow.appendChild(btn);
     if (scriptEl && scriptEl.parentNode) {
@@ -167,19 +176,45 @@
   var via = jarFromAttr(script && script.getAttribute("data-via"));
   var rawLabel = ((script && script.getAttribute("data-label")) || "").trim();
   var label = rawLabel.slice(0, 32) || "Tip 🍪";
+  var hostWallet = jarFromAttr(script && script.getAttribute("data-wallet"));
+  var premium = ((script && script.getAttribute("data-premium")) || "").toLowerCase() === "true";
+  var theme = ((script && script.getAttribute("data-theme")) || "auto").toLowerCase();
+  var analytics = ((script && script.getAttribute("data-analytics")) || "").toLowerCase() === "true";
+  // default analytics to true for premium
+  if (premium && ((script && script.getAttribute("data-analytics")) === null)) {
+    analytics = true;
+  }
+  var currentHref = location.href;
+  var ref = null;
+  try {
+    if (currentHref && new URL(currentHref).host && currentHref.indexOf("http") === 0) {
+      ref = new URL(currentHref).host;
+    }
+  } catch (e) {
+    /* non-URL current — skip ref */
+  }
   var host = mountButton(script, jar, via, label);
 
   window.CookieCrumbs = {
     loaded: true,
     open: function (jarOverride, viaOverride) {
-      openModal(buildWidgetUrl(jarFromAttr(jarOverride) || jar, viaOverride || via, location.href));
+      openModal(buildWidgetUrl(
+        jarFromAttr(jarOverride) || jar,
+        viaOverride || via,
+        location.href,
+        ref,
+        premium,
+        hostWallet,
+        theme,
+        analytics
+      ));
     },
     close: function () {
       var o = document.getElementById("ccw-overlay");
       if (o && o.parentNode) o.parentNode.removeChild(o);
     },
     buttonHost: host,
-    version: 1,
+    version: 2, // premium embed support
   };
 
   // deep link: host page loaded with ?cookie_crumbs=popup opens the widget now

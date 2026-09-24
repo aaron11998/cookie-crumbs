@@ -138,23 +138,23 @@ assert.ok(mEmbed, "app.js must define buildEmbedSnippet(jar, originBase)");
 const buildEmbedSnippet = new Function(`return (${mEmbed[0].replace(/^function buildEmbedSnippet/, "function")})`)();
 
 const SNIPPET_BASE = "https://altaranexus-ship-it.github.io/cookie-crumbs/";
-// personal page: snippet carries that page's jar
+// personal page: snippet carries that page's jar + premium upgrade hooks
 assert.strictEqual(
   buildEmbedSnippet("JarAddr111", SNIPPET_BASE),
-  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-jar="JarAddr111"></script>',
-  "personal page embed must carry data-jar"
+  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-jar="JarAddr111"\n  data-premium="true"\n  data-wallet="PASTE_HOST_WALLET_HERE"\n  data-theme="auto"\n  data-analytics="true"></script>',
+  "personal page embed must carry data-jar + premium upgrade hooks"
 );
-// community page: no data-jar (loader defaults to community jar)
+// community page: no data-jar (loader defaults to community jar), same premium hooks
 assert.strictEqual(
   buildEmbedSnippet(null, SNIPPET_BASE),
-  '<script src="' + SNIPPET_BASE + 'embed.js"></script>',
-  "community page embed must omit data-jar (loader default)"
+  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-premium="true"\n  data-wallet="PASTE_HOST_WALLET_HERE"\n  data-theme="auto"\n  data-analytics="true"></script>',
+  "community page embed must omit data-jar (loader default) and carry premium hooks"
 );
 // address containing quotes/&/angle brackets gets escaped inside the attribute
 // (defense in depth — jar addresses are already validated as base58 upstream)
 assert.strictEqual(
-  buildEmbedSnippet('x"y&z<w>', SNIPPET_BASE),
-  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-jar="x&quot;y&amp;z&lt;w&gt;"></script>',
+  buildEmbedSnippet('x"y&z<w>', SNIPPET_BASE).split("\n  data-premium")[0],
+  '<script src="' + SNIPPET_BASE + 'embed.js"\n  data-jar="x&quot;y&amp;z&lt;w&gt;"',
   "snippet builder must escape quotes/ampersands/angle brackets in interpolated attrs"
 );
 
@@ -193,3 +193,44 @@ assert.ok(/html\.cc-embed \.topbar[\s\S]*?display: none/.test(stylesCss), "embed
 assert.ok(stylesCss.includes(".embed-snippet"), "styles.css must style the embed snippet");
 
 console.log("ALL CLAW-72 UNIT TESTS PASS (incl. treasury tile + share row + embed widget)");
+
+// --- CLAW-72 premium embed subscription (recurring-income mechanism #7) ---
+// 1 COOK/month paid on-chain to the treasury unlocks 50% referral share + analytics.
+
+// premium share math (mirrors sendTip via getReferralSharePct)
+assert.ok(appJs.includes("const PREMIUM_REFERRAL_SHARE_PCT = 50;"), "premium share must be 50%");
+assert.ok(appJs.includes("const SUB_LAMPORTS = 1_000_000_000;"), "subscription price must be 1 COOK");
+assert.ok(/function getReferralSharePct\(isPremium\) \{/.test(appJs), "app.js must define getReferralSharePct");
+assert.ok(
+  /const refSharePct = getReferralSharePct\(premiumActive\);/.test(appJs),
+  "sendTip must route the referral share through premium status (wired, not dead code)"
+);
+
+// verification must be per-host-wallet and fail-closed (no free-premium hole)
+const mCheck = appJs.match(/async function checkPremiumEmbed\(hostWalletStr\) \{[\s\S]*?\n\}/);
+assert.ok(mCheck, "app.js must define checkPremiumEmbed(hostWalletStr)");
+assert.ok(/keys\[0\] !== hostPk\.toBase58\(\)/.test(mCheck[0]), "premium requires payment FROM the host's own wallet");
+assert.ok(/gained >= SUB_LAMPORTS/.test(mCheck[0]), "premium requires payment of at least SUB_LAMPORTS");
+assert.ok(/PREMIUM_CHECK_WINDOW_S = 30 \* 86400/.test(appJs), "subscription verifies within a rolling 30-day window (recurring)");
+assert.ok(/return false; \/\/ fail-closed/.test(mCheck[0]), "RPC failure must fail closed, never fake premium");
+assert.ok(!appJs.includes("SUB_PUBKEY_STR"), "stale SUB_PUBKEY_STR constant must be gone (treasury IS the sub destination)");
+assert.ok(/new PublicKey\(FEE_PUBKEY_STR\)/.test(mCheck[0]), "subscription payments land in the protocol treasury");
+
+// premium request plumbing: embed.js forwards attrs, widget verifies then activates
+assert.ok(/q\.get\("premium"\) !== "1"/.test(appJs), "widget must gate premium verification on ?premium=1");
+assert.ok(/q\.get\("host_wallet"\)/.test(appJs), "widget must read ?host_wallet for per-host verification");
+assert.ok(embedJs.includes('"premium", "1"'), "embed.js must forward premium in the widget URL");
+assert.ok(embedJs.includes('"host_wallet"'), "embed.js must forward the host wallet in the widget URL");
+assert.ok(/data-premium/.test(embedJs) && /data-wallet/.test(embedJs), "embed.js must document data-premium/data-wallet attrs");
+
+// analytics events fire only for verified premium embeds
+assert.ok(/function premiumEvent\(type, detail\) \{[\s\S]*?if \(!premiumActive\) return;/.test(appJs), "premiumEvent must be gated on verified premium");
+assert.ok(appJs.includes('premiumEvent("tip:open"'), "tip:open analytics event must fire");
+assert.ok(appJs.includes('premiumEvent("tip:confirm"'), "tip:confirm analytics event must fire");
+assert.ok(appJs.includes('premiumEvent("tip:error"'), "tip:error analytics event must fire");
+
+// the embed card must tell hosts how to buy premium (self-serve sales surface)
+assert.ok(indexHtml.includes('id="premium-note"'), "index.html must show hosts the premium embed offer");
+assert.ok(indexHtml.includes("1 COOK/month"), "premium offer must state the price");
+
+console.log("ALL CLAW-72 UNIT TESTS PASS (incl. premium embed subscription)");

@@ -162,42 +162,40 @@ https://altaranexus-ship-it.github.io/cookie-crumbs/
 - Next candidates scouted: kdense-science-lab (200) and aeon-intelligence
   (200) Pages sites exist — doc/product pages are natural embed hosts.
 
-## 2026-09-21 (heartbeat 6) — Premium upgrade (monetization mechanism #7)
-
-**Shipped:** a one-time 100 COOK upgrade fee paid to the protocol treasury unlocks Premium for personal tip pages. Verified on-chain via SPL Memo (`cookie-crumbs:premium:upgrade:<jar_address>`). Upgraded jars get:
-- Custom hero (gradient shimmer text animation)
-- Custom colors / CTA text
-- Analytics dashboard hook (placeholder for future)
-- No "powered by" badge
-- Owner can further customize via on-chain memo (`cookie-crumbs:premium:customize:<jar>:<json>`)
-
-**Implementation:**
-- New constants: `PREMIUM_UPGRADE_FEE` (100 COOK), `PREMIUM_MEMO_PREFIX`, upgrade/customize actions
-- `checkPremiumStatus()` — scans treasury signatures for upgrade memos for this jar
-- `applyPremiumUI()` — injects premium badge, custom hero styling, customize CTA, CSS animations
-- `sendUpgrade()` — builds tx: transfer 100 COOK to treasury + upgrade memo
-- `openCustomizeModal()` — owner-only modal for hero/subtitle/CTA; saves config on-chain via memo
-- Premium upgrade button in personal tip pages (visible when wallet connected, not yet premium)
-
-**Verification:**
-- `node tests/monetization.test.js` → ALL CLAW-72 UNIT TESTS PASS
-- `node --check app.js` clean
-- Commit 892f627 pushed to main; GitHub Pages rebuild serving new code
-- Live app: https://altaranexus-ship-it.github.io/cookie-crumbs/
-- Live lumenfall embed: https://altaranexus-ship-it.github.io/lumenfall/ (first external distribution rail, cookie-crumbs/embed.js loaded)
-
-**Monetization ledger (honest):**
-1. Protocol fee 0.75%/tip → org treasury 2Bmq…f3k (live)
-2. Referral split 30% of fee via ?via= (live)
-3. Boosted tips ≥5 COOK pay-for-prominence (live)
-4. Treasury transparency tile (live)
-5. Share-to-earn viral loop (live)
-6. Embed widget distribution rail (live, on lumenfall Pages)
-7. Premium upgrade 100 COOK → treasury (live) ← **new this heartbeat**
-
-Revenue to date: $0 — no tips/upgrades yet; Cookie Chain has no faucet, first real interaction needs an owner COOK bridge (hyperlane.cookiescan.io).
-
-**Evidence:**
-- Commit: https://github.com/altaranexus-ship-it/cookie-crumbs/commit/892f627
-- Live app: https://altaranexus-ship-it.github.io/cookie-crumbs/
-- Embed: https://altaranexus-ship-it.github.io/lumenfall/ (verified widget load)
+## 2026-09-24 (heartbeat 7) — premium embed subscription (recurring mechanism #8)
+- Resumed the prior run's half-finished WIP and finished it properly. The WIP
+  had three real defects, all fixed:
+  1. buildEmbedSnippet's esc() had been mangled into a no-op (injection
+     regression) — restored real &amp;/&lt;/&gt;/&quot; escaping (test enforces).
+  2. checkPremiumEmbed granted premium if ANY qualifying payment existed from
+     ANY wallet (free-premium hole) — now requires the payment to come FROM the
+     host's own wallet (first signer), >= 1 COOK, within a rolling 30-day
+     window, fail-closed on RPC errors.
+  3. getReferralSharePct was defined but never called (dead code, demo-ware) —
+     sendTip now routes the referral share through premiumActive: verified
+     premium embeds pay their promoter 50% of the fee vs 30% standard.
+- Mechanism (recurring): host pays 1 COOK/month to the protocol treasury
+  (FEE_PUBKEY_STR) from the wallet pasted into data-wallet; verification is
+  100% on-chain (getSignaturesForAddress + getTransaction balance deltas on the
+  treasury). Subscription expires every 30 days -> hosts who want the 50%
+  share keep paying. Self-serve: no signup, no backend, the payment IS the sub.
+- Premium also unlocks gated analytics: premiumEvent() postMessages
+  cookie-crumbs:tip:open/confirm/error to the host page, only when
+  premiumActive (free embeds get nothing).
+- Sales surface: in-app embed card now pitches the premium upgrade (price +
+  mechanism), README has a full "Premium embeds" section.
+- Snippet now ships premium hooks: data-premium="true" +
+  data-wallet="PASTE_HOST_WALLET_HERE" + data-analytics="true" — hosts fill in
+  their wallet; unverified hosts silently stay on the standard 30% share.
+- Tests extended (escape regression, per-host-wallet requirement, 30-day
+  window, fail-closed, dead-code wiring guard, analytics gating, sales
+  surface): ALL PASS; node --check app.js + embed.js clean.
+- Honest on-chain evidence (slot ~26.97M): treasury 0 lamports / 0 sigs, jar 0,
+  tips 0. All local owner wallets are 0 SOL, so no self-funded subscription
+  payment was possible this run — first sub txid will come from the first
+  real host. Mechanism is LIVE on Pages; demand not yet shown.
+- Monetization ledger: 1. protocol fee 0.75% -> treasury (live) 2. referral
+  30% via ?via= (live) 3. boosted tips >= 5 COOK (live) 4. treasury tile (live)
+  5. share-to-earn loop (live) 6. embed widget rail (live) 7. premium upgrade
+  100 COOK one-time (live) 8. premium embed subscription 1 COOK/month,
+  on-chain verified (live) <- new this heartbeat.

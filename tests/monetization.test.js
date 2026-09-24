@@ -98,7 +98,7 @@ const mShare = appJs.match(/function buildShareUrl\(current, jar, sharer\) \{[\s
 assert.ok(mShare, "app.js must define buildShareUrl(current, jar, sharer)");
 const buildShareUrl = new Function(`return (${mShare[0].replace(/^function buildShareUrl/, "function")})`)();
 
-const BASE = "https://altaranexus-ship-it.github.io/cookie-crumbs/";
+const BASE = "https://aaron11998.github.io/cookie-crumbs/";
 // connected sharer: their own via replaces the page's promoter via
 assert.strictEqual(
   buildShareUrl(BASE + "?jar=JarAAA&via=PromoterBBB#feed", "JarAAA", "SharerCCC"),
@@ -137,7 +137,7 @@ const mEmbed = appJs.match(/function buildEmbedSnippet\(jar, originBase\) \{[\s\
 assert.ok(mEmbed, "app.js must define buildEmbedSnippet(jar, originBase)");
 const buildEmbedSnippet = new Function(`return (${mEmbed[0].replace(/^function buildEmbedSnippet/, "function")})`)();
 
-const SNIPPET_BASE = "https://altaranexus-ship-it.github.io/cookie-crumbs/";
+const SNIPPET_BASE = "https://aaron11998.github.io/cookie-crumbs/";
 // personal page: snippet carries that page's jar + premium upgrade hooks
 assert.strictEqual(
   buildEmbedSnippet("JarAddr111", SNIPPET_BASE),
@@ -183,11 +183,11 @@ assert.ok(/textContent\s*=\s*label/.test(embedJs), "label must render via textCo
 // wiring: embed card + copy button exist; embed-mode class + iframe-close listener
 assert.ok(indexHtml.includes('id="embed-card"'), "index.html must render the embed card");
 assert.ok(indexHtml.includes('id="embed-snippet"') && indexHtml.includes('id="embed-copy"'), "embed card needs snippet + copy button");
-assert.ok(indexHtml.includes('href="https://github.com/altaranexus-ship-it/cookie-crumbs#embed-on-your-site"'), "embed card must link the embed docs");
+assert.ok(indexHtml.includes('href="https://github.com/aaron11998/cookie-crumbs#embed-on-your-site"'), "embed card must link the embed docs");
 assert.ok(/function renderEmbedCard\(\)/.test(appJs), "app.js must render the embed card");
 assert.ok(/renderEmbedCard\(\);/.test(appJs), "renderEmbedCard must be invoked at startup");
 assert.ok(/classList\.add\("cc-embed"\)/.test(appJs), "embed mode must tag <html> with cc-embed");
-assert.ok(/e\.origin !== "https:\/\/altaranexus-ship-it\.github\.io"/.test(appJs), "iframe close listener must check message origin");
+assert.ok(/e\.origin !== "https:\/\/aaron11998\.github\.io"/.test(appJs), "iframe close listener must check message origin");
 const stylesCss = fs.readFileSync(path.join(ROOT, "styles.css"), "utf8");
 assert.ok(/html\.cc-embed \.topbar[\s\S]*?display: none/.test(stylesCss), "embed mode CSS must hide the topbar chrome");
 assert.ok(stylesCss.includes(".embed-snippet"), "styles.css must style the embed snippet");

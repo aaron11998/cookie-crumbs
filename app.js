@@ -37,7 +37,7 @@ const MEMO_PROGRAM_ID_STR = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const SPONSOR_LAMPORTS = 25_000_000_000; // 25 COOK per 24h slot
 const SPONSOR_HOURS = 24;
 const SPONSOR_PREFIX = "sponsor:";
-const REPO_URL = "https://github.com/altaranexus-ship-it/cookie-crumbs";
+const REPO_URL = "https://github.com/aaron11998/cookie-crumbs";
 const LAMPORTS_PER_COOK = 1_000_000_000;
 const FEED_LIMIT = 25;
 // How many recent jar transactions are scanned. The FEED only renders FEED_LIMIT
@@ -133,7 +133,7 @@ const viaPubkey = VIA ? new PublicKey(VIA) : null;
   try {
     if (!JAR.personal || !JAR.address) return;
     const short = JAR.address.slice(0, 4) + "…" + JAR.address.slice(-4);
-    const u = new URL("https://altaranexus-ship-it.github.io/cookie-crumbs/");
+    const u = new URL("https://aaron11998.github.io/cookie-crumbs/");
     u.searchParams.set("jar", JAR.address);
     const set = (sel, attr, val) => {
       const t = document.head.querySelector(sel);
@@ -1409,7 +1409,7 @@ function renderEmbedCard() {
   const snippetEl = document.getElementById("embed-snippet");
   if (!snippetEl) return;
   const jar = JAR.personal ? JAR.address : null; // community jar = loader default
-  snippetEl.textContent = buildEmbedSnippet(jar, "https://altaranexus-ship-it.github.io/cookie-crumbs/");
+  snippetEl.textContent = buildEmbedSnippet(jar, "https://aaron11998.github.io/cookie-crumbs/");
   const copyBtn = document.getElementById("embed-copy");
   if (copyBtn) copyBtn.onclick = async () => {
     try {
@@ -1545,7 +1545,7 @@ function renderSponsorBanner(rows) {
 if (new URLSearchParams(location.search).get("embed") === "1") {
   document.documentElement.classList.add("cc-embed");
   window.addEventListener("message", (e) => {
-    if (e.origin !== "https://altaranexus-ship-it.github.io") return;
+    if (e.origin !== "https://aaron11998.github.io") return;
     if (e.data === "cookie-crumbs-close") {
       try { window.close(); } catch {}
     }

@@ -6,7 +6,7 @@
  * RPC, or transaction bytes.
  *
  * Usage:
- *   <script src="https://altaranexus-ship-it.github.io/cookie-crumbs/embed.js"
+ *   <script src="https://aaron11998.github.io/cookie-crumbs/embed.js"
  *           data-jar="<base58 wallet or jar address>"
  *           data-via="<optional promoter address>"
  *           data-label="<optional button label, default 'Tip 🍪'>"
@@ -49,7 +49,7 @@
       return null;
     })();
 
-  var APP_ORIGIN = "https://altaranexus-ship-it.github.io";
+  var APP_ORIGIN = "https://aaron11998.github.io";
   var APP_PATH = "/cookie-crumbs/";
   var APP_URL = APP_ORIGIN + APP_PATH;
 
